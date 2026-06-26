@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.redis import get_redis
 from app.core.storage import init_storage
-from app.routers import auth, attempts, tutoring, exercises, students, targets, review, internal
+from app.routers import auth, attempts, tutoring, exercises, students, targets, review, internal, problems
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -79,3 +79,4 @@ app.include_router(students.router)
 app.include_router(targets.router)
 app.include_router(review.router)
 app.include_router(internal.router)
+app.include_router(problems.router)

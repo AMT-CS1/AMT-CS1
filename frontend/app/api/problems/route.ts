@@ -11,16 +11,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const data = await apiFetch('targets', {
+    const data = await apiFetch('problems', {
       method: 'GET',
       token,
     });
 
     return NextResponse.json(data);
   } catch (error: any) {
-    console.error('Targets GET route handler error:', error);
+    console.error('Problems GET route handler error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch targets' },
+      { error: error.message || 'Failed to fetch problems' },
       { status: error.status || 500 }
     );
   }
@@ -36,8 +36,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Call FastAPI backend POST /targets
-    const data = await apiFetch('targets', {
+    const data = await apiFetch('problems', {
       method: 'POST',
       token,
       body: JSON.stringify(body),
@@ -45,9 +44,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json(data);
   } catch (error: any) {
-    console.error('Targets route handler error:', error);
+    console.error('Problems POST route handler error:', error);
     return NextResponse.json(
-      { error: error.message || 'Configuration failed' },
+      { error: error.message || 'Failed to save problem' },
       { status: error.status || 500 }
     );
   }
@@ -69,7 +68,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const data = await apiFetch(`targets/${id}`, {
+    const data = await apiFetch(`problems/${id}`, {
       method: 'PUT',
       token,
       body: JSON.stringify(body),
@@ -77,9 +76,9 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(data);
   } catch (error: any) {
-    console.error('Targets PUT route handler error:', error);
+    console.error('Problems PUT route handler error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to update target' },
+      { error: error.message || 'Failed to update problem' },
       { status: error.status || 500 }
     );
   }
@@ -100,16 +99,16 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const data = await apiFetch(`targets/${id}`, {
+    const data = await apiFetch(`problems/${id}`, {
       method: 'DELETE',
       token,
     });
 
     return NextResponse.json(data);
   } catch (error: any) {
-    console.error('Targets DELETE route handler error:', error);
+    console.error('Problems DELETE route handler error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to delete target' },
+      { error: error.message || 'Failed to delete problem' },
       { status: error.status || 500 }
     );
   }

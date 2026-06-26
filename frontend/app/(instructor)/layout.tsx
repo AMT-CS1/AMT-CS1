@@ -15,7 +15,7 @@ export default async function InstructorLayout({
   const username = decoded?.user_metadata?.username || decoded?.sub || 'Instructor';
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-800">
+    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-800">
       {/* Sidebar */}
       <aside className="w-64 border-r border-slate-200 bg-white flex flex-col justify-between p-6">
         <div className="space-y-8">
@@ -39,7 +39,7 @@ export default async function InstructorLayout({
               className="flex items-center space-x-3 rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 border border-indigo-100"
             >
               <ClipboardCheck className="h-4.5 w-4.5" />
-              <span>Review Console</span>
+              <span>Homework & Review</span>
             </Link>
             <div
               className="flex items-center space-x-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-450 cursor-not-allowed select-none"
@@ -72,7 +72,7 @@ export default async function InstructorLayout({
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
         <header className="h-16 border-b border-slate-200 px-8 flex items-center justify-between bg-white shadow-xs">
-          <h2 className="text-lg font-bold text-slate-800 tracking-wide">Review Console</h2>
+          <h2 className="text-lg font-bold text-slate-800 tracking-wide">Homework & Review Console</h2>
           <div className="flex items-center space-x-4">
             <Link
               href="/status"

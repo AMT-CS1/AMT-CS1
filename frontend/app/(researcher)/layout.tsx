@@ -15,7 +15,7 @@ export default async function ResearcherLayout({
   const username = decoded?.user_metadata?.username || decoded?.sub || 'Researcher';
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-800">
+    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-800">
       {/* Sidebar */}
       <aside className="w-64 border-r border-slate-200 bg-white flex flex-col justify-between p-6">
         <div className="space-y-8">

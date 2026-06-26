@@ -1,6 +1,8 @@
 import { cookies } from 'next/headers';
 import { apiFetch } from '@/lib/api';
 import { AlertCircle, CheckCircle } from 'lucide-react';
+import ProblemsManager from './ProblemsManager';
+import HomeworkManager from './HomeworkManager';
 
 async function getReviewEpisodes(token: string) {
   try {
@@ -128,6 +130,12 @@ export default async function InstructorPage() {
           )}
         </div>
       </div>
+
+      {/* Dynamic Homeworks Management */}
+      <HomeworkManager />
+
+      {/* Dynamic Problems Management */}
+      <ProblemsManager />
     </div>
   );
 }

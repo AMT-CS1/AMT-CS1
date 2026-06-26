@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Play, Code2, CheckCircle2, XCircle, AlertCircle, RefreshCw, ChevronRight } from 'lucide-react';
+import DapCodeEditor from '@/components/DapCodeEditor';
 
 interface WeeklyTarget {
   id: string;
@@ -47,22 +48,54 @@ algorithm
     endwhile
     
     write fact
+endprogram`,
+  'generic': `program HomeworkTask
+dictionary
+    // Define your variables here
+algorithm
+    // Write your logic here
 endprogram`
 };
 
 const getTaskRef = (kcFocus: string): string => {
   const focus = kcFocus.toLowerCase();
-  if (focus.includes('variables')) return 'swap-variables';
-  if (focus.includes('loops')) return 'factorial';
-  return 'swap-variables';
+  if (focus.includes('variables') || focus.includes('swapping')) return 'swap-variables';
+  if (focus.includes('loop') || focus.includes('factorial')) return 'factorial';
+  return 'generic';
 };
+
+interface Problem {
+  id: string;
+  key: string;
+  title: string;
+  description: string;
+  starter_code: string;
+  test_cases: any[];
+}
 
 export default function StudentWorkspace({ initialTargets }: StudentWorkspaceProps) {
   const [targets] = useState<WeeklyTarget[]>(initialTargets || []);
+  const [problems, setProblems] = useState<Problem[]>([]);
   
   const [selectedTarget, setSelectedTarget] = useState<WeeklyTarget | null>(() => {
     return initialTargets && initialTargets.length > 0 ? initialTargets[0] : null;
   });
+
+  const getProblemForTarget = (target: WeeklyTarget | null): Problem | null => {
+    if (!target) return null;
+    const ref = getTaskRef(target.topic_kc_focus);
+    let found = problems.find(p => p.key === ref);
+    if (found) return found;
+
+    // Substring KC match fallback
+    found = problems.find(p => 
+      p.key.toLowerCase().includes(target.topic_kc_focus.toLowerCase()) ||
+      target.topic_kc_focus.toLowerCase().includes(p.key.toLowerCase())
+    );
+    if (found) return found;
+
+    return null;
+  };
 
   const [code, setCode] = useState(() => {
     const firstTarget = initialTargets && initialTargets.length > 0 ? initialTargets[0] : null;
@@ -77,18 +110,57 @@ export default function StudentWorkspace({ initialTargets }: StudentWorkspacePro
   const [evalResult, setEvalResult] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // Fetch problems on mount
+  useEffect(() => {
+    const fetchProblems = async () => {
+      try {
+        const res = await fetch('/api/problems');
+        if (res.ok) {
+          const data = await res.json();
+          setProblems(data);
+        }
+      } catch (err) {
+        console.error('Failed to load problems:', err);
+      }
+    };
+    fetchProblems();
+  }, []);
+
+  // Update code template once problems load or selection changes
+  useEffect(() => {
+    if (selectedTarget) {
+      const prob = getProblemForTarget(selectedTarget);
+      if (prob) {
+        setCode(prob.starter_code);
+      } else {
+        const ref = getTaskRef(selectedTarget.topic_kc_focus);
+        setCode(STARTER_CODES[ref] || '');
+      }
+    }
+  }, [selectedTarget, problems]);
+
   const handleSelectTarget = (target: WeeklyTarget) => {
     setSelectedTarget(target);
-    const ref = getTaskRef(target.topic_kc_focus);
-    setCode(STARTER_CODES[ref] || '');
+    const prob = getProblemForTarget(target);
+    if (prob) {
+      setCode(prob.starter_code);
+    } else {
+      const ref = getTaskRef(target.topic_kc_focus);
+      setCode(STARTER_CODES[ref] || '');
+    }
     setEvalResult(null);
     setErrorMessage('');
   };
 
   const resetTemplate = () => {
     if (selectedTarget) {
-      const ref = getTaskRef(selectedTarget.topic_kc_focus);
-      setCode(STARTER_CODES[ref] || '');
+      const prob = getProblemForTarget(selectedTarget);
+      if (prob) {
+        setCode(prob.starter_code);
+      } else {
+        const ref = getTaskRef(selectedTarget.topic_kc_focus);
+        setCode(STARTER_CODES[ref] || '');
+      }
       setEvalResult(null);
       setErrorMessage('');
     }
@@ -102,7 +174,8 @@ export default function StudentWorkspace({ initialTargets }: StudentWorkspacePro
     setEvalResult(null);
     setErrorMessage('');
 
-    const taskRef = getTaskRef(selectedTarget.topic_kc_focus);
+    const prob = getProblemForTarget(selectedTarget);
+    const taskRef = prob ? prob.key : getTaskRef(selectedTarget.topic_kc_focus);
 
     try {
       const res = await fetch('/api/attempts', {
@@ -159,11 +232,11 @@ export default function StudentWorkspace({ initialTargets }: StudentWorkspacePro
           {/* Target List */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4">
-              Select Coding Problem
+              Select Homework
             </h2>
             <div className="space-y-2.5">
               {targets.length === 0 ? (
-                <p className="text-xs text-slate-400">No active coding exercises found. Run the seed script.</p>
+                <p className="text-xs text-slate-400">No active homeworks found. Run the seed script.</p>
               ) : (
                 targets.map((target) => {
                   const active = selectedTarget?.id === target.id;
@@ -178,8 +251,8 @@ export default function StudentWorkspace({ initialTargets }: StudentWorkspacePro
                       }`}
                     >
                       <div className="flex flex-col">
-                        <span className="text-xs font-semibold text-slate-400">Week {target.week}</span>
-                        <span className="text-sm font-bold mt-0.5">{getTaskRef(target.topic_kc_focus) === 'swap-variables' ? 'Variable Swapping' : 'Factorial Calculator'}</span>
+                        <span className="text-xs font-semibold text-slate-400">Homework {target.week}</span>
+                        <span className="text-sm font-bold mt-0.5">{getProblemForTarget(target)?.title || target.topic_kc_focus}</span>
                         <span className="text-[10px] text-slate-500 mt-1">Focus: {target.topic_kc_focus}</span>
                       </div>
                       <ChevronRight className={`h-4.5 w-4.5 transition-transform ${active ? 'text-teal-600 translate-x-0.5' : 'text-slate-400'}`} />
@@ -195,14 +268,14 @@ export default function StudentWorkspace({ initialTargets }: StudentWorkspacePro
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
               <div>
                 <span className="inline-flex items-center rounded-md bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700 ring-1 ring-inset ring-teal-600/10">
-                  Week {selectedTarget.week} Task
+                  Homework {selectedTarget.week}
                 </span>
                 <h3 className="text-lg font-bold text-slate-900 mt-2">
-                  {getTaskRef(selectedTarget.topic_kc_focus) === 'swap-variables' ? 'Variable Swapping' : 'Factorial Calculator'}
+                  {getProblemForTarget(selectedTarget)?.title || selectedTarget.topic_kc_focus}
                 </h3>
               </div>
               <div className="prose prose-sm text-slate-650 max-w-none text-xs leading-relaxed border-t border-slate-100 pt-4 whitespace-pre-line">
-                {selectedTarget.target_task}
+                {getProblemForTarget(selectedTarget)?.description || selectedTarget.target_task}
               </div>
             </div>
           )}
@@ -227,14 +300,11 @@ export default function StudentWorkspace({ initialTargets }: StudentWorkspacePro
               </button>
             </div>
 
-            <div className="relative bg-slate-900 p-4">
-              <textarea
+            <div className="relative bg-slate-900 p-1">
+              <DapCodeEditor
                 value={code}
-                onChange={(e) => setCode(e.target.value)}
+                onChange={setCode}
                 rows={14}
-                className="w-full bg-transparent font-mono text-xs text-emerald-400 placeholder-slate-700 focus:outline-hidden resize-y leading-relaxed border-0"
-                placeholder="// Write your DAP program here..."
-                required
               />
             </div>
 

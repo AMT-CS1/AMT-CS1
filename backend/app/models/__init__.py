@@ -9,6 +9,7 @@ from app.models.case import CuratedCase
 from app.models.rating import Rating
 from app.models.evidence import EvidenceBlob
 from app.models.log import InteractionLog
+from app.models.problem import Problem
 
 __all__ = [
     "Base",
@@ -21,5 +22,6 @@ __all__ = [
     "CuratedCase",
     "Rating",
     "EvidenceBlob",
-    "InteractionLog"
+    "InteractionLog",
+    "Problem"
 ]

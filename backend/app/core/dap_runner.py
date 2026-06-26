@@ -2,7 +2,6 @@ import os
 import subprocess
 import tempfile
 import uuid
-from app.core.problems import PROBLEMS
 from app.core.llm import get_llm_provider
 
 
@@ -70,33 +69,47 @@ def run_dap_code(code: str, stdin_data: str = "", timeout: float = 2.0) -> dict:
             except Exception:
                 pass
 
-def evaluate_student_attempt(task_ref: str, code: str) -> dict:
+def evaluate_student_attempt(problem_or_ref: object, code: str) -> dict:
     """
     Evaluates student code against the predefined test cases for a task.
+    problem_or_ref can be a Problem DB object, a dict, or a string task_ref fallback.
     """
-    problem = PROBLEMS.get(task_ref)
+    if isinstance(problem_or_ref, str):
+        problem = None
+    else:
+        problem = problem_or_ref
+
     if not problem:
+        ref_str = problem_or_ref if isinstance(problem_or_ref, str) else "Unknown"
         return {
             "success": False,
-            "error": f"Unknown problem reference: '{task_ref}'",
+            "error": f"Unknown problem reference: '{ref_str}'",
             "passed": False,
             "test_results": []
         }
         
-    test_cases = problem["test_cases"]
+    if isinstance(problem, dict):
+        test_cases = problem["test_cases"]
+    else:
+        test_cases = problem.test_cases
+
     test_results = []
     all_passed = True
     compilation_error = None
     
     for idx, tc in enumerate(test_cases):
-        run = run_dap_code(code, stdin_data=tc["input"])
+        # Allow tc to be a dict or a model instance (or model-like object with attributes)
+        tc_input = tc["input"] if isinstance(tc, dict) else getattr(tc, "input", "")
+        tc_expected = tc["expected"] if isinstance(tc, dict) else getattr(tc, "expected", "")
+
+        run = run_dap_code(code, stdin_data=tc_input)
         
         # If the compilation or execution outright failed (non-zero exit code or timeout)
         if not run["success"] and "timed out" in run.get("error", ""):
             test_results.append({
                 "test_case_index": idx + 1,
-                "input": tc["input"],
-                "expected": tc["expected"],
+                "input": tc_input,
+                "expected": tc_expected,
                 "actual": "",
                 "passed": False,
                 "error": run["error"]
@@ -109,8 +122,8 @@ def evaluate_student_attempt(task_ref: str, code: str) -> dict:
             all_passed = False
             test_results.append({
                 "test_case_index": idx + 1,
-                "input": tc["input"],
-                "expected": tc["expected"],
+                "input": tc_input,
+                "expected": tc_expected,
                 "actual": "",
                 "passed": False,
                 "error": compilation_error
@@ -121,7 +134,7 @@ def evaluate_student_attempt(task_ref: str, code: str) -> dict:
         actual_output = run["stdout"]
         
         actual_tokens = [t.strip() for t in actual_output.strip().split() if t.strip()]
-        expected_tokens = [t.strip() for t in tc["expected"].strip().split() if t.strip()]
+        expected_tokens = [t.strip() for t in tc_expected.strip().split() if t.strip()]
         
         passed = (actual_tokens == expected_tokens)
         if not passed:
@@ -129,8 +142,8 @@ def evaluate_student_attempt(task_ref: str, code: str) -> dict:
             
         test_results.append({
             "test_case_index": idx + 1,
-            "input": tc["input"],
-            "expected": tc["expected"].strip(),
+            "input": tc_input,
+            "expected": tc_expected.strip(),
             "actual": actual_output.strip(),
             "passed": passed,
             "error": None
@@ -143,17 +156,25 @@ def evaluate_student_attempt(task_ref: str, code: str) -> dict:
         "test_results": test_results
     }
 
-async def generate_feedback(task_ref: str, code: str, eval_results: dict) -> str:
+async def generate_feedback(problem_or_ref: object, code: str, eval_results: dict) -> str:
     """
     Asynchronously invokes the LLM provider to generate pedagogical Socratic feedback.
     """
     
-    problem = PROBLEMS.get(task_ref)
+    if isinstance(problem_or_ref, str):
+        problem = None
+    else:
+        problem = problem_or_ref
+
     if not problem:
         return "Unknown problem reference."
         
-    title = problem["title"]
-    description = problem["description"]
+    if isinstance(problem, dict):
+        title = problem["title"]
+        description = problem["description"]
+    else:
+        title = problem.title
+        description = problem.description
     
     # Extract details of failing test cases
     failed_details = []
