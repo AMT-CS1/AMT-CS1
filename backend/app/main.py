@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.redis import get_redis
 from app.core.storage import init_storage
-from app.routers import auth, attempts, tutoring, exercises, students, targets, review
+from app.routers import auth, attempts, tutoring, exercises, students, targets, review, internal
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -29,7 +29,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -78,3 +78,4 @@ app.include_router(exercises.router)
 app.include_router(students.router)
 app.include_router(targets.router)
 app.include_router(review.router)
+app.include_router(internal.router)

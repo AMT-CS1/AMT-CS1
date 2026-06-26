@@ -21,7 +21,13 @@ export function decodeJwt(token: string): DecodedToken | null {
         .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
         .join('')
     );
-    return JSON.parse(jsonPayload);
+    const payload = JSON.parse(jsonPayload);
+    // Support Supabase style token where the actual role is nested in user_metadata
+    const resolvedRole = payload.user_metadata?.role || payload.role;
+    return {
+      ...payload,
+      role: resolvedRole,
+    };
   } catch (error) {
     console.error('Failed to decode JWT token:', error);
     return null;

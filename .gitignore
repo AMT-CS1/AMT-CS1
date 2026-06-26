@@ -28,3 +28,5 @@ minio_data/
 *.njsproj
 *.sln
 *.swp
+.agent/
+backend/dap

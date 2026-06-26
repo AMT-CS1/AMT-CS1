@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/amt_db"
     
+    # CORS
+    ALLOWED_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
     
