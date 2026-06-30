@@ -11,11 +11,13 @@ from app.core.redis import get_redis
 from app.core.storage import init_storage
 from app.routers import auth, attempts, tutoring, exercises, students, targets, review, internal, problems
 
+import anyio
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup actions: Initialize S3 buckets
     print("Starting up: initializing MinIO storage buckets...")
-    init_storage()
+    await anyio.to_thread.run_sync(init_storage)
     yield
     # Shutdown actions
     print("Shutting down...")

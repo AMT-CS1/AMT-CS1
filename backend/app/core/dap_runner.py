@@ -2,15 +2,52 @@ import os
 import subprocess
 import tempfile
 import uuid
+import asyncio
 from app.core.llm import get_llm_provider
 
 
-DAP_PATH = "/app/dap"
+def _get_dap_path() -> str:
+    env_path = os.environ.get("DAP_PATH")
+    if env_path:
+        return env_path
+        
+    docker_path = "/usr/local/bin/dap"
+    if os.path.exists(docker_path):
+        return docker_path
+        
+    default_path = "/app/dap"
+    if os.path.exists(default_path):
+        return default_path
+        
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    
+    if os.name == 'nt':
+        local_dap_exe = os.path.join(base_dir, "dap.exe")
+        if os.path.exists(local_dap_exe):
+            return local_dap_exe
+            
+        local_dap = os.path.join(base_dir, "dap")
+        if os.path.exists(local_dap):
+            try:
+                import shutil
+                shutil.copy2(local_dap, local_dap_exe)
+                return local_dap_exe
+            except Exception:
+                return local_dap
+        return "dap.exe"
+    else:
+        local_dap = os.path.join(base_dir, "dap")
+        if os.path.exists(local_dap):
+            return local_dap
+        return "dap"
 
-def run_dap_code(code: str, stdin_data: str = "", timeout: float = 2.0) -> dict:
+DAP_PATH = _get_dap_path()
+
+
+def _run_dap_code_sync(code: str, stdin_data: str = "", timeout: float = 2.0) -> dict:
     """
-    Writes code to a temp file, runs the DAP compiler in a subprocess,
-    and returns the execution results.
+    Synchronous helper to run DAP compiler in a subprocess.
+    Executed in a background thread to prevent blocking the event loop.
     """
     temp_dir = tempfile.gettempdir()
     temp_file_path = os.path.join(temp_dir, f"sub_{uuid.uuid4().hex}.dap")
@@ -69,7 +106,14 @@ def run_dap_code(code: str, stdin_data: str = "", timeout: float = 2.0) -> dict:
             except Exception:
                 pass
 
-def evaluate_student_attempt(problem_or_ref: object, code: str) -> dict:
+async def run_dap_code(code: str, stdin_data: str = "", timeout: float = 2.0) -> dict:
+    """
+    Runs the DAP compiler asynchronously using anyio thread offloading.
+    """
+    import anyio
+    return await anyio.to_thread.run_sync(_run_dap_code_sync, code, stdin_data, timeout)
+
+async def evaluate_student_attempt(problem_or_ref: object, code: str) -> dict:
     """
     Evaluates student code against the predefined test cases for a task.
     problem_or_ref can be a Problem DB object, a dict, or a string task_ref fallback.
@@ -97,14 +141,23 @@ def evaluate_student_attempt(problem_or_ref: object, code: str) -> dict:
     all_passed = True
     compilation_error = None
     
+    # We can gather test runs concurrently!
+    async def run_case(idx, tc_input, tc_expected):
+        run = await run_dap_code(code, stdin_data=tc_input)
+        return idx, tc_input, tc_expected, run
+
+    tasks = []
     for idx, tc in enumerate(test_cases):
-        # Allow tc to be a dict or a model instance (or model-like object with attributes)
         tc_input = tc["input"] if isinstance(tc, dict) else getattr(tc, "input", "")
         tc_expected = tc["expected"] if isinstance(tc, dict) else getattr(tc, "expected", "")
-
-        run = run_dap_code(code, stdin_data=tc_input)
+        tasks.append(run_case(idx, tc_input, tc_expected))
         
-        # If the compilation or execution outright failed (non-zero exit code or timeout)
+    runs = await asyncio.gather(*tasks)
+    
+    # Sort runs by index to maintain ordering
+    runs.sort(key=lambda x: x[0])
+    
+    for idx, tc_input, tc_expected, run in runs:
         if not run["success"] and "timed out" in run.get("error", ""):
             test_results.append({
                 "test_case_index": idx + 1,
@@ -156,7 +209,7 @@ def evaluate_student_attempt(problem_or_ref: object, code: str) -> dict:
         "test_results": test_results
     }
 
-async def generate_feedback(problem_or_ref: object, code: str, eval_results: dict) -> str:
+async def generate_feedback(problem_or_ref: object, code: str, eval_results: dict, lang: str = "en") -> str:
     """
     Asynchronously invokes the LLM provider to generate pedagogical Socratic feedback.
     """
@@ -171,10 +224,10 @@ async def generate_feedback(problem_or_ref: object, code: str, eval_results: dic
         
     if isinstance(problem, dict):
         title = problem["title"]
-        description = problem["description"]
+        description = problem.get(f"description_{lang}") or problem.get("description_en") or problem.get("description")
     else:
         title = problem.title
-        description = problem.description
+        description = getattr(problem, f"description_{lang}", None) or getattr(problem, "description_en", None) or getattr(problem, "description", None)
     
     # Extract details of failing test cases
     failed_details = []
@@ -202,9 +255,18 @@ async def generate_feedback(problem_or_ref: object, code: str, eval_results: dic
             f"```\n\n"
         )
         
+    tutor_intro = (
+        "You are a friendly, supportive computer science tutor helping a student learn basic programming logic.\n"
+        "The student is submitting code written in 'DAP' (a simple pseudocode language)."
+    ) if lang != "id" else (
+        "Anda adalah asisten tutor ilmu komputer yang ramah dan suportif membantu siswa belajar logika pemrograman dasar.\n"
+        "Siswa mengirimkan kode yang ditulis dalam 'DAP' (bahasa pseudocode sederhana)."
+    )
+
+    lang_rule = "- Respond in English." if lang != "id" else "- Respond in Indonesian (Bahasa Indonesia)."
+
     prompt = (
-        f"You are a friendly, supportive computer science tutor helping a student learn basic programming logic.\n"
-        f"The student is submitting code written in 'DAP' (a simple pseudocode language).\n\n"
+        f"{tutor_intro}\n\n"
         f"Problem: {title}\n"
         f"Description:\n{description}\n\n"
         f"Student's Code:\n"
@@ -218,6 +280,7 @@ async def generate_feedback(problem_or_ref: object, code: str, eval_results: dic
         f"- Do NOT write or provide the corrected code. Keep it Socratic.\n"
         f"- Identify the logical issue (e.g. incorrect order of assignments, wrong loop condition) or syntax issue.\n"
         f"- Be concise (less than 150 words) and encouraging.\n"
+        f"{lang_rule}"
     )
     
     try:

@@ -8,7 +8,7 @@ if db_url.startswith("postgresql://"):
 
 engine = create_async_engine(
     db_url,
-    echo=True,
+    echo=settings.DB_ECHO,
     future=True,
 )
 

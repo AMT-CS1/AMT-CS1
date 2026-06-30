@@ -9,7 +9,8 @@ class TestCaseSchema(BaseModel):
 class ProblemCreate(BaseModel):
     key: str = Field(..., max_length=100)
     title: str = Field(..., max_length=255)
-    description: str
+    description_en: str
+    description_id: str
     starter_code: str
     test_cases: List[TestCaseSchema]
 
@@ -17,7 +18,8 @@ class ProblemResponse(BaseModel):
     id: uuid.UUID
     key: str
     title: str
-    description: str
+    description_en: str
+    description_id: str
     starter_code: str
     test_cases: List[TestCaseSchema]
 

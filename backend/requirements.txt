@@ -13,3 +13,4 @@ bcrypt>=4.0.0
 boto3>=1.28.0
 python-multipart>=0.0.6
 greenlet>=3.0.0
+httpx>=0.24.0

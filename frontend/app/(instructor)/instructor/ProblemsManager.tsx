@@ -13,7 +13,8 @@ interface Problem {
   id: string;
   key: string;
   title: string;
-  description: string;
+  description_en: string;
+  description_id: string;
   starter_code: string;
   test_cases: TestCase[];
 }
@@ -26,7 +27,8 @@ export default function ProblemsManager() {
   // Form states
   const [key, setKey] = useState('');
   const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  const [descriptionEn, setDescriptionEn] = useState('');
+  const [descriptionId, setDescriptionId] = useState('');
   const [starterCode, setStarterCode] = useState('');
   const [testCases, setTestCases] = useState<TestCase[]>([{ input: '', expected: '' }]);
   
@@ -78,7 +80,8 @@ export default function ProblemsManager() {
     setEditingProblem(prob);
     setKey(prob.key);
     setTitle(prob.title);
-    setDescription(prob.description);
+    setDescriptionEn(prob.description_en);
+    setDescriptionId(prob.description_id);
     setStarterCode(prob.starter_code);
     setTestCases(prob.test_cases.length > 0 ? prob.test_cases : [{ input: '', expected: '' }]);
     setError('');
@@ -89,7 +92,8 @@ export default function ProblemsManager() {
     setEditingProblem(null);
     setKey('');
     setTitle('');
-    setDescription('');
+    setDescriptionEn('');
+    setDescriptionId('');
     setStarterCode('');
     setTestCases([{ input: '', expected: '' }]);
     setError('');
@@ -121,7 +125,7 @@ export default function ProblemsManager() {
     setError('');
 
     // Basic validation
-    if (!key || !title || !description || !starterCode) {
+    if (!key || !title || !descriptionEn || !descriptionId || !starterCode) {
       setError('All fields are required.');
       setSubmitting(false);
       return;
@@ -146,7 +150,8 @@ export default function ProblemsManager() {
         body: JSON.stringify({
           key,
           title,
-          description,
+          description_en: descriptionEn,
+          description_id: descriptionId,
           starter_code: starterCode,
           test_cases: testCases,
         }),
@@ -165,7 +170,8 @@ export default function ProblemsManager() {
       // Reset form fields
       setKey('');
       setTitle('');
-      setDescription('');
+      setDescriptionEn('');
+      setDescriptionId('');
       setStarterCode('');
       setTestCases([{ input: '', expected: '' }]);
       
@@ -262,9 +268,20 @@ export default function ProblemsManager() {
                     </div>
                   </div>
 
-                  <p className="text-xs text-slate-550 line-clamp-3 whitespace-pre-line border-t border-slate-100 pt-2 leading-relaxed">
-                    {prob.description}
-                  </p>
+                  <div className="border-t border-slate-100 pt-2 space-y-2">
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">English Description</span>
+                      <p className="text-xs text-slate-550 line-clamp-3 whitespace-pre-line leading-relaxed">
+                        {prob.description_en}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Indonesian Description</span>
+                      <p className="text-xs text-slate-550 line-clamp-3 whitespace-pre-line leading-relaxed">
+                        {prob.description_id}
+                      </p>
+                    </div>
+                  </div>
 
                   <div className="bg-slate-900 p-2.5 rounded-lg font-mono text-[10px] text-emerald-400 overflow-x-auto max-h-32">
                     <pre>{prob.starter_code}</pre>
@@ -327,16 +344,29 @@ export default function ProblemsManager() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1.5">Problem Description *</label>
-            <textarea
-              placeholder="Write clear instructions for the students. Supports markdown/newlines."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-hidden font-sans"
-              required
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-1.5">Problem Description (English) *</label>
+              <textarea
+                placeholder="Write clear instructions in English. Supports markdown/newlines."
+                value={descriptionEn}
+                onChange={(e) => setDescriptionEn(e.target.value)}
+                rows={5}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-hidden font-sans"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-1.5">Problem Description (Indonesian) *</label>
+              <textarea
+                placeholder="Tulis instruksi dalam Bahasa Indonesia. Mendukung markdown/baris baru."
+                value={descriptionId}
+                onChange={(e) => setDescriptionId(e.target.value)}
+                rows={5}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-hidden font-sans"
+                required
+              />
+            </div>
           </div>
 
           <div>

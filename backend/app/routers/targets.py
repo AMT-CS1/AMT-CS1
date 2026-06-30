@@ -22,7 +22,10 @@ async def configure_weekly_target(
         week=target.week,
         topic_kc_focus=target.topic_kc_focus,
         target_task=target.target_task,
-        source=target.source
+        source=target.source,
+        title=target.title,
+        description=target.description,
+        deadline=target.deadline
     )
     db.add(db_target)
     await db.commit()
@@ -57,6 +60,9 @@ async def update_weekly_target(
     db_target.topic_kc_focus = target_in.topic_kc_focus
     db_target.target_task = target_in.target_task
     db_target.source = target_in.source
+    db_target.title = target_in.title
+    db_target.description = target_in.description
+    db_target.deadline = target_in.deadline
     
     await db.commit()
     await db.refresh(db_target)

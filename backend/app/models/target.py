@@ -1,5 +1,6 @@
 import uuid
-from sqlalchemy import String, Integer, Text
+from datetime import datetime
+from sqlalchemy import String, Integer, Text, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
 
@@ -12,3 +13,6 @@ class WeeklyTarget(Base):
     topic_kc_focus: Mapped[str] = mapped_column(String(255), nullable=False)
     target_task: Mapped[str] = mapped_column(Text, nullable=False)
     source: Mapped[str] = mapped_column(String(100), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=True)
+    description: Mapped[str] = mapped_column(Text, nullable=True)
+    deadline: Mapped[datetime] = mapped_column(DateTime, nullable=True)

@@ -10,6 +10,8 @@ from app.models.rating import Rating
 from app.models.evidence import EvidenceBlob
 from app.models.log import InteractionLog
 from app.models.problem import Problem
+from app.models.hint_quiz import HintQuizQuestion
+from app.models.quiz_progress import QuizProgress
 
 __all__ = [
     "Base",
@@ -23,5 +25,8 @@ __all__ = [
     "Rating",
     "EvidenceBlob",
     "InteractionLog",
-    "Problem"
+    "Problem",
+    "HintQuizQuestion",
+    "QuizProgress"
 ]
+

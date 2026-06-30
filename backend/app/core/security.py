@@ -2,10 +2,16 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, List
 import bcrypt
 import jwt
+import uuid
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.config import settings
+from app.core.database import get_db
+from app.models.user import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
@@ -25,47 +31,7 @@ def get_password_hash(password: str) -> str:
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
-# Stub User database for Day 1
-STUB_USERS = {
-    "11111111-1111-1111-1111-111111111111": {
-        "id": "11111111-1111-1111-1111-111111111111",
-        "username": "student_user",
-        "email": "student@example.com",
-        "hashed_password": get_password_hash("studentpass"),
-        "role": "student",
-        "consent_status": True
-    },
-    "22222222-2222-2222-2222-222222222222": {
-        "id": "22222222-2222-2222-2222-222222222222",
-        "username": "instructor_user",
-        "email": "instructor@example.com",
-        "hashed_password": get_password_hash("instructorpass"),
-        "role": "instructor",
-        "consent_status": True
-    },
-    "33333333-3333-3333-3333-333333333333": {
-        "id": "33333333-3333-3333-3333-333333333333",
-        "username": "researcher_user",
-        "email": "researcher@example.com",
-        "hashed_password": get_password_hash("researcherpass"),
-        "role": "researcher",
-        "consent_status": True
-    },
-    "44444444-4444-4444-4444-444444444444": {
-        "id": "44444444-4444-4444-4444-444444444444",
-        "username": "rater_user",
-        "email": "rater@example.com",
-        "hashed_password": get_password_hash("raterpass"),
-        "role": "rater",
-        "consent_status": True
-    }
-}
-
-def find_stub_user_by_username(username: str) -> dict | None:
-    for u in STUB_USERS.values():
-        if u["username"] == username or u["email"] == username:
-            return u
-    return None
+# Stub Users removed. Seeding is handled via seed_demo.py database seeding.
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     user_id = data.get("sub")
@@ -98,7 +64,10 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     encoded_jwt = jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
+) -> dict:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -117,9 +86,23 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     except jwt.PyJWTError:
         raise credentials_exception
         
-    user = STUB_USERS.get(sub)
-    if user is None:
-        # Resolve user dynamically from JWT metadata if not present in stub DB
+    try:
+        stmt = select(User).where(User.id == uuid.UUID(sub))
+        result = await db.execute(stmt)
+        db_user = result.scalar_one_or_none()
+    except Exception:
+        db_user = None
+
+    if db_user:
+        user = {
+            "id": str(db_user.id),
+            "username": db_user.username,
+            "email": db_user.username + "@example.com",
+            "role": db_user.role,
+            "consent_status": db_user.consent_status
+        }
+    else:
+        # Resolve user dynamically from JWT metadata if not present in DB
         user_metadata = payload.get("user_metadata", {})
         email = payload.get("email", "")
         user = {

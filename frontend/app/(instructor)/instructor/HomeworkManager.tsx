@@ -12,7 +12,8 @@ interface Problem {
   id: string;
   key: string;
   title: string;
-  description: string;
+  description_en: string;
+  description_id: string;
   starter_code: string;
   test_cases: TestCase[];
 }
@@ -24,7 +25,25 @@ interface Homework {
   topic_kc_focus: string;
   target_task: string;
   source: string;
+  deadline?: string;
 }
+
+const getKcDisplayName = (topic: string): string => {
+  if (!topic) return '';
+  return topic.split(',')
+    .map(s => {
+      const t = s.trim().toLowerCase();
+      if (t === 'co' || t.includes('circle') || t.includes('constant')) return 'Constant';
+      if (t === 'va' || t.includes('swap-variables') || t.includes('swapping') || t.includes('variable')) return 'Variable';
+      if (t === 'op' || t.includes('even-odd') || t.includes('even') || t.includes('operator')) return 'Operation';
+      if (t === 'ex' || t.includes('quadratic-eval') || t.includes('quadratic') || t.includes('expression')) return 'Expression';
+      if (t === 'io' || t.includes('greeting-gen') || t.includes('greeting') || t.includes('input') || t.includes('output')) return 'InputOutput';
+      if (t === 'cd' || t.includes('max-three') || t.includes('maximum') || t.includes('conditional')) return 'Conditional';
+      if (t === 'lo' || t.includes('factorial') || t.includes('loop')) return 'Loop';
+      return s.trim();
+    })
+    .join(', ');
+};
 
 export default function HomeworkManager() {
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
@@ -38,6 +57,7 @@ export default function HomeworkManager() {
   const [selectedProblemKey, setSelectedProblemKey] = useState('');
   const [topicKcFocus, setTopicKcFocus] = useState('');
   const [targetTask, setTargetTask] = useState('');
+  const [deadline, setDeadline] = useState('');
   
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
@@ -89,7 +109,7 @@ export default function HomeworkManager() {
     const prob = currentProblems.find(p => p.key === key);
     if (prob) {
       setTopicKcFocus(prob.key);
-      setTargetTask(prob.description);
+      setTargetTask(prob.description_en || prob.description_id);
     }
   };
 
@@ -100,6 +120,23 @@ export default function HomeworkManager() {
     setSelectedProblemKey(hw.topic_kc_focus);
     setTopicKcFocus(hw.topic_kc_focus);
     setTargetTask(hw.target_task);
+    if (hw.deadline) {
+      try {
+        const dateObj = new Date(hw.deadline);
+        const year = dateObj.getFullYear();
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        const _day = String(dateObj.getDate()).padStart(2, '0');
+        const hours = String(dateObj.getHours()).padStart(2, '0');
+        const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+        setDeadline(`${year}-${month}-${_day}T${hours}:${minutes}`);
+      } catch (e) {
+        console.error('Failed to parse deadline date', e);
+        setDeadline('');
+      }
+    } else {
+      setDeadline('');
+    }
     setError('');
     setSubmitSuccess(false);
   };
@@ -108,6 +145,7 @@ export default function HomeworkManager() {
     setEditingHomework(null);
     setWeek(1);
     setCourseRef('CS1-PYTHON-2026');
+    setDeadline('');
     if (problems.length > 0) {
       handleProblemSelect(problems[0].key, problems);
     } else {
@@ -163,7 +201,8 @@ export default function HomeworkManager() {
           week: Number(week),
           topic_kc_focus: topicKcFocus,
           target_task: targetTask,
-          source: 'manual'
+          source: 'manual',
+          deadline: deadline ? new Date(deadline).toISOString() : null
         }),
       });
 
@@ -180,6 +219,7 @@ export default function HomeworkManager() {
       // Clear fields if creating
       if (method === 'POST') {
         setWeek(1);
+        setDeadline('');
         if (problems.length > 0) {
           handleProblemSelect(problems[0].key, problems);
         }
@@ -238,11 +278,24 @@ export default function HomeworkManager() {
                         </span>
                         <div>
                           <span className="font-extrabold text-sm text-slate-800">
-                            {matchedProblem ? matchedProblem.title : hw.topic_kc_focus}
+                            {matchedProblem ? matchedProblem.title : getKcDisplayName(hw.topic_kc_focus)}
                           </span>
                           <span className="block text-[9px] text-slate-400 font-semibold uppercase mt-0.5 tracking-wider">
                             Course: {hw.course_ref}
                           </span>
+                          {hw.deadline && (
+                            <div className="flex items-center space-x-1.5 text-slate-500 text-[10px] font-medium mt-1">
+                              <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                              <span>Due: {new Date(hw.deadline).toLocaleString('en-US', {
+                                weekday: 'short',
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit'
+                              })}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                       
@@ -355,6 +408,16 @@ export default function HomeworkManager() {
           </div>
 
           <div>
+            <label className="block text-xs font-bold text-slate-600 mb-1.5">Deadline (Optional)</label>
+            <input
+              type="datetime-local"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-hidden bg-white text-slate-800"
+            />
+          </div>
+
+          <div>
             <label className="block text-xs font-bold text-slate-600 mb-1.5">Select Coding Problem *</label>
             {problems.length === 0 ? (
               <p className="text-xs text-amber-600 font-medium">Please create a coding problem first in the form below.</p>
@@ -379,7 +442,7 @@ export default function HomeworkManager() {
             <input
               type="text"
               placeholder="e.g. Loops"
-              value={topicKcFocus}
+              value={getKcDisplayName(topicKcFocus)}
               onChange={(e) => setTopicKcFocus(e.target.value)}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-hidden bg-slate-50 text-slate-600 cursor-not-allowed"
               readOnly

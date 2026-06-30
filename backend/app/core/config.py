@@ -8,8 +8,12 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 WORKSPACE_DIR = BACKEND_DIR.parent
 
 class Settings(BaseSettings):
+    # Environment
+    ENV: str = "development"
+
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/amt_db"
+    DB_ECHO: bool = False
     
     # CORS
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
@@ -40,3 +44,6 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
+
+if settings.ENV == "production" and settings.JWT_SECRET == "supersecretjwtkeyforamtcs1developmentonly":
+    raise ValueError("Insecure JWT_SECRET configured for production environment!")

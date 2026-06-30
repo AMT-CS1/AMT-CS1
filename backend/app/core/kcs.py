@@ -3,23 +3,38 @@
 
 K_COMPONENTS = [
     {
-        "id": "variables",
+        "id": "CO",
+        "name": "Constants",
+        "topic_area": "Basic Concepts"
+    },
+    {
+        "id": "VA",
         "name": "Variables",
-        "topic_area": "Variables and Types"
+        "topic_area": "Basic Concepts"
     },
     {
-        "id": "assignment",
-        "name": "Assignment Statement",
-        "topic_area": "Variables and Types"
+        "id": "OP",
+        "name": "Operators",
+        "topic_area": "Basic Concepts"
     },
     {
-        "id": "data_types",
-        "name": "Data Types",
-        "topic_area": "Variables and Types"
+        "id": "EX",
+        "name": "Expressions",
+        "topic_area": "Basic Concepts"
     },
     {
-        "id": "arithmetic_operators",
-        "name": "Arithmetic Operators",
-        "topic_area": "Expressions"
+        "id": "IO",
+        "name": "Input/Output",
+        "topic_area": "Basic Concepts"
+    },
+    {
+        "id": "CD",
+        "name": "Conditionals",
+        "topic_area": "Control Structures"
+    },
+    {
+        "id": "LO",
+        "name": "Loops",
+        "topic_area": "Control Structures"
     }
 ]

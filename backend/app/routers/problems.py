@@ -48,7 +48,8 @@ async def create_or_update_problem(
     
     if db_problem:
         db_problem.title = problem_in.title
-        db_problem.description = problem_in.description
+        db_problem.description_en = problem_in.description_en
+        db_problem.description_id = problem_in.description_id
         db_problem.starter_code = problem_in.starter_code
         db_problem.test_cases = test_cases_data
     else:
@@ -56,7 +57,8 @@ async def create_or_update_problem(
             id=uuid.uuid4(),
             key=problem_in.key,
             title=problem_in.title,
-            description=problem_in.description,
+            description_en=problem_in.description_en,
+            description_id=problem_in.description_id,
             starter_code=problem_in.starter_code,
             test_cases=test_cases_data
         )
@@ -88,7 +90,8 @@ async def update_problem(
     test_cases_data = [tc.model_dump() for tc in problem_in.test_cases]
     db_problem.key = problem_in.key
     db_problem.title = problem_in.title
-    db_problem.description = problem_in.description
+    db_problem.description_en = problem_in.description_en
+    db_problem.description_id = problem_in.description_id
     db_problem.starter_code = problem_in.starter_code
     db_problem.test_cases = test_cases_data
 

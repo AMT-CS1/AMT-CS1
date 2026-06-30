@@ -8,6 +8,7 @@ class AttemptCreate(BaseModel):
     content: str = Field(..., max_length=50000)
     source: str = Field(..., max_length=100)
     confidence_level: float | None = None
+    lang: str | None = "en"
 
 class AttemptResponse(BaseModel):
     id: uuid.UUID

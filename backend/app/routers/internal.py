@@ -1,16 +1,20 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 import uuid
 from app.schemas.internal import (
     FeedbackRequestPayload, FeedbackResponsePayload,
     ProblemRequestPayload, ProblemResponsePayload
 )
+from app.core.security import RoleChecker
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
 @router.post("/feedback-request", response_model=FeedbackResponsePayload)
-async def mock_feedback_request(payload: FeedbackRequestPayload):
+async def mock_feedback_request(
+    payload: FeedbackRequestPayload,
+    current_user: dict = Depends(RoleChecker(["instructor", "researcher"]))
+):
     # Handle the fallback case
-    if "fallback" in payload.kc_focus.lower() or "loop" in payload.kc_focus.lower():
+    if "fallback" in payload.kc_focus.lower() or "loop" in payload.kc_focus.lower() or "lo" in payload.kc_focus.lower():
         return FeedbackResponsePayload(
             status="no_match",
             feedback_text=None,
@@ -28,9 +32,12 @@ async def mock_feedback_request(payload: FeedbackRequestPayload):
     )
 
 @router.post("/problem-request", response_model=ProblemResponsePayload)
-async def mock_problem_request(payload: ProblemRequestPayload):
+async def mock_problem_request(
+    payload: ProblemRequestPayload,
+    current_user: dict = Depends(RoleChecker(["instructor", "researcher"]))
+):
     # Handle the fallback case
-    if "fallback" in payload.kc_focus.lower() or "loop" in payload.kc_focus.lower():
+    if "fallback" in payload.kc_focus.lower() or "loop" in payload.kc_focus.lower() or "lo" in payload.kc_focus.lower():
         return ProblemResponsePayload(
             status="no_match",
             exercise_id=None,

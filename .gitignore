@@ -30,3 +30,6 @@ minio_data/
 *.swp
 .agent/
 backend/dap
+backend/dap.exe
+
+ListKC.pdf
