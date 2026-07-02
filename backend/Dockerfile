@@ -3,7 +3,7 @@ FROM golang:1.23-alpine AS builder
 WORKDIR /src
 RUN apk add --no-cache git
 RUN git clone https://github.com/rafiathallah3/dap.git .
-RUN go build -o /dap utama.go
+RUN CGO_ENABLED=0 go build -o /dap utama.go
 
 # Stage 2: Run Python FastAPI server
 FROM python:3.11-slim
