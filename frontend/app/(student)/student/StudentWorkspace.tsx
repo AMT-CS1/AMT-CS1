@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Sparkles, Play, Code2, CheckCircle2, XCircle,
   AlertCircle, RefreshCw, ChevronRight, ArrowLeft,
-  Lock, Unlock, Calendar, Award, BookOpen, Clock
+  Lock, Unlock, Calendar, Award, BookOpen, Clock,
+  Shuffle, ThumbsUp, ThumbsDown
 } from 'lucide-react';
 import DapCodeEditor from '@/components/DapCodeEditor';
+import { KcInfo, getKcDisplayName, DEFAULT_STARTER_CODE } from '@/lib/kc-utils';
 
 interface WeeklyTarget {
   id: string;
@@ -19,6 +21,7 @@ interface WeeklyTarget {
   title?: string;
   description?: string;
   deadline?: string;
+  randomize_problems?: boolean;
 }
 
 interface StudentWorkspaceProps {
@@ -26,108 +29,16 @@ interface StudentWorkspaceProps {
   selectedTargetId?: string;
 }
 
-const STARTER_CODES: Record<string, string> = {
-  'swap-variables': `program SwapVariables
-dictionary
-    x, y, temp : integer
-algorithm
-    read x
-    read y
-    
-    // Write your swapping logic here:
-    temp <- x
-    x <- y
-    y <- temp
-    
-    write x
-    write y
-endprogram`,
-  'factorial': `program Factorial
-dictionary
-    n, fact, i : integer
-algorithm
-    read n
-    fact <- 1
-    i <- 1
-    
-    // Write a loop here to compute the factorial:
-    while i <= n do
-        fact <- fact * i
-        i <- i + 1
-    endwhile
-    
-    write fact
-endprogram`,
-  'generic': `program HomeworkTask
-dictionary
-    // Define your variables here
-algorithm
-    // Write your logic here
-endprogram`
-};
-
-const getTaskRef = (kcFocus: string): string => {
-  const focus = kcFocus.toLowerCase();
-  if (focus === 'lo, va' || focus === 'lo,va' || focus.includes('sum-n')) return 'sum-n';
-  if (focus === 'cd, lo, ex' || focus === 'cd,lo,ex' || focus.includes('sum-evens')) return 'sum-evens';
-  if (focus === 'va' || focus.includes('variables') || focus.includes('swapping') || focus.includes('variable')) return 'swap-variables';
-  if (focus === 'lo' || focus.includes('loop') || focus.includes('factorial') || focus.includes('loops')) return 'factorial';
-  if (focus === 'co' || focus.includes('constant') || focus.includes('constants') || focus.includes('circle')) return 'circle-calc';
-  if (focus === 'op' || focus.includes('operator') || focus.includes('operators') || focus.includes('even')) return 'even-odd';
-  if (focus === 'ex' || focus.includes('expression') || focus.includes('expressions') || focus.includes('quadratic')) return 'quadratic-eval';
-  if (focus === 'io' || focus.includes('input') || focus.includes('output') || focus.includes('greeting')) return 'greeting-gen';
-  if (focus === 'cd' || focus.includes('conditional') || focus.includes('conditionals') || focus.includes('maximum') || focus.includes('max')) return 'max-three';
-  return 'generic';
-};
-
-const getKcDisplayName = (topic: string): string => {
-  if (!topic) return '';
-  return topic.split(',')
-    .map(s => {
-      const t = s.trim().toLowerCase();
-      if (t === 'co' || t.includes('circle') || t.includes('constant')) return 'Constant';
-      if (t === 'va' || t.includes('swap-variables') || t.includes('swapping') || t.includes('variable')) return 'Variable';
-      if (t === 'op' || t.includes('even-odd') || t.includes('even') || t.includes('operator')) return 'Operation';
-      if (t === 'ex' || t.includes('quadratic-eval') || t.includes('quadratic') || t.includes('expression')) return 'Expression';
-      if (t === 'io' || t.includes('greeting-gen') || t.includes('greeting') || t.includes('input') || t.includes('output')) return 'InputOutput';
-      if (t === 'cd' || t.includes('max-three') || t.includes('maximum') || t.includes('conditional')) return 'Conditional';
-      if (t === 'lo' || t.includes('factorial') || t.includes('loop')) return 'Loop';
-      return s.trim();
-    })
-    .join(', ');
-};
-
-const getDeadlineForWeek = (week: number): string => {
-  if (week === 1) return 'Sunday, Jun 28, 2026 at 11:59 PM';
-  if (week === 2) return 'Sunday, Jul 5, 2026 at 11:59 PM';
-  if (week === 3) return 'Sunday, Jul 12, 2026 at 11:59 PM';
-  return `Sunday, Jul ${12 + (week - 3) * 7}, 2026 at 11:59 PM`;
-};
-
-const formatDeadline = (dateStr: string): string => {
-  const d = new Date(dateStr);
-  const options: Intl.DateTimeFormatOptions = {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  };
-  const dateFormatted = d.toLocaleDateString('en-US', options);
-  const timeFormatted = d.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  });
-  return `${dateFormatted} at ${timeFormatted}`;
-};
-
 interface QuizQuestion {
   type: 'mc' | 'sa';
-  text: string;
+  text_en: string;
+  text_id: string;
   code?: string;
-  options?: string[];
+  options_en?: string[];
+  options_id?: string[];
   answer: string;
-  explanation: string;
+  explanation_en: string;
+  explanation_id: string;
 }
 
 interface Problem {
@@ -138,7 +49,25 @@ interface Problem {
   description_id: string;
   starter_code: string;
   test_cases: any[];
+  kc_tags: string;
 }
+
+const formatDeadline = (dateStr: string): string => {
+  const d = new Date(dateStr);
+  const options: Intl.DateTimeFormatOptions = {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  };
+  const dateFormatted = d.toLocaleDateString('en-US', options);
+  const timeFormatted = d.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+  return `${dateFormatted} at ${timeFormatted}`;
+};
 
 export default function StudentWorkspace({ initialTargets, selectedTargetId }: StudentWorkspaceProps) {
   const router = useRouter();
@@ -146,6 +75,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
     return [...(initialTargets || [])].sort((a, b) => a.week - b.week);
   });
   const [problems, setProblems] = useState<Problem[]>([]);
+  const [kcList, setKcList] = useState<KcInfo[]>([]);
   const [descLang, setDescLang] = useState<'en' | 'id'>('en');
 
   // Derived state based on the routing parameters
@@ -155,14 +85,31 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
   const view = selectedTarget ? 'editor' : 'list';
 
   const [solvedTargetIds, setSolvedTargetIds] = useState<string[]>([]);
+  const [solvedProblemKeys, setSolvedProblemKeys] = useState<Record<string, string[]>>({});
+  const [activeProblemIndex, setActiveProblemIndex] = useState(0);
   const [code, setCode] = useState('');
+
+  // Resizable split between Problem Statement and Pseudocode Workspace (LeetCode-style)
+  const DEFAULT_SPLIT = 42; // % width of the problem panel on lg+ screens
+  const MIN_SPLIT = 28;
+  const MAX_SPLIT = 72;
+  const [splitRatio, setSplitRatio] = useState(DEFAULT_SPLIT);
+  const splitContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Vertical split inside the right column: editor pane vs results pane
+  const DEFAULT_VSPLIT = 58; // % height of the editor pane on lg+ screens
+  const MIN_VSPLIT = 30;
+  const MAX_VSPLIT = 78;
+  const REVEAL_VSPLIT = 45; // after a run, shrink the editor pane to at most this so results are visible
+  const [vSplitRatio, setVSplitRatio] = useState(DEFAULT_VSPLIT);
+  const [isPaneDragging, setIsPaneDragging] = useState(false);
+  const rightColRef = useRef<HTMLDivElement | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [evalResult, setEvalResult] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState('');
 
   // Hint / Concept Check Quiz States
-  const [lastSubmissionTime, setLastSubmissionTime] = useState<number>(Date.now());
   const [showHintPrompt, setShowHintPrompt] = useState(false);
   const [inHintQuiz, setInHintQuiz] = useState(false);
   const [quizLoading, setQuizLoading] = useState(false);
@@ -175,29 +122,118 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
   const [isMounted, setIsMounted] = useState(false);
   const [checkingQuizStatus, setCheckingQuizStatus] = useState(false);
   const [quizFinishedKeys, setQuizFinishedKeys] = useState<string[]>([]);
+  const [quizFeedback, setQuizFeedback] = useState<{ id: string; text: string } | null>(null);
+  const [quizFeedbackRating, setQuizFeedbackRating] = useState<number | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
+    const saved = localStorage.getItem('amt_split_ratio');
+    if (saved) {
+      const v = parseFloat(saved);
+      if (!isNaN(v) && v >= MIN_SPLIT && v <= MAX_SPLIT) setSplitRatio(v);
+    }
+    const savedV = localStorage.getItem('amt_vsplit_ratio');
+    if (savedV) {
+      const v = parseFloat(savedV);
+      if (!isNaN(v) && v >= MIN_VSPLIT && v <= MAX_VSPLIT) setVSplitRatio(v);
+    }
   }, []);
+
+  const startPaneDrag = (e: React.MouseEvent | React.TouchEvent, axis: 'x' | 'y') => {
+    e.preventDefault();
+    const container = axis === 'x' ? splitContainerRef.current : rightColRef.current;
+    if (!container) return;
+    const setRatio = axis === 'x' ? setSplitRatio : setVSplitRatio;
+    const clamp = (v: number) =>
+      axis === 'x'
+        ? Math.min(MAX_SPLIT, Math.max(MIN_SPLIT, v))
+        : Math.min(MAX_VSPLIT, Math.max(MIN_VSPLIT, v));
+    const storageKey = axis === 'x' ? 'amt_split_ratio' : 'amt_vsplit_ratio';
+
+    const onMove = (ev: MouseEvent | TouchEvent) => {
+      const rect = container.getBoundingClientRect();
+      const point = 'touches' in ev ? ev.touches[0] : ev;
+      if (!point) return;
+      const fraction = axis === 'x'
+        ? (point.clientX - rect.left) / rect.width
+        : (point.clientY - rect.top) / rect.height;
+      setRatio(clamp(fraction * 100));
+    };
+    const onEnd = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onEnd);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      setIsPaneDragging(false);
+      setRatio(v => {
+        localStorage.setItem(storageKey, String(v));
+        return v;
+      });
+    };
+
+    setIsPaneDragging(true);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onEnd);
+    window.addEventListener('touchmove', onMove);
+    window.addEventListener('touchend', onEnd);
+    document.body.style.cursor = axis === 'x' ? 'col-resize' : 'row-resize';
+    document.body.style.userSelect = 'none';
+  };
 
   useEffect(() => {
     if (view !== 'editor' || inHintQuiz) {
       setShowHintPrompt(false);
-      return;
+    }
+  }, [view, inHintQuiz]);
+
+  const getProblemsForTarget = (target: WeeklyTarget | null): Problem[] => {
+    if (!target || problems.length === 0) return [];
+
+    // Parse target KCs
+    const targetKcs = target.topic_kc_focus.split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+
+    // Filter problems that have overlapping KCs
+    const matching = problems.filter(p => {
+      const pKcs = p.kc_tags.split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+      return targetKcs.some(tk => pKcs.includes(tk));
+    });
+
+    if (matching.length === 0) return [];
+
+    if (target.randomize_problems && matching.length > 3) {
+      if (typeof window !== 'undefined') {
+        const cacheKey = `amt_assigned_problems_${target.id}`;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          try {
+            const cachedKeys = JSON.parse(cached);
+            const cachedProbs = cachedKeys.map((k: string) => problems.find(p => p.key === k)).filter(Boolean) as Problem[];
+            if (cachedProbs.length === 3) {
+              return cachedProbs;
+            }
+          } catch (e) {
+            console.error('Error parsing cached problems', e);
+          }
+        }
+
+        // Randomly select 3 problems (using random shuffle cached in localStorage)
+        const shuffled = [...matching].sort(() => 0.5 - Math.random());
+        const selected = shuffled.slice(0, 3);
+        localStorage.setItem(cacheKey, JSON.stringify(selected.map(p => p.key)));
+        return selected;
+      }
     }
 
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - lastSubmissionTime;
-      if (elapsed >= 60000) {
-        setShowHintPrompt(true);
-      }
-    }, 1000);
+    return matching.slice(0, 3);
+  };
 
-    return () => clearInterval(interval);
-  }, [view, lastSubmissionTime, inHintQuiz]);
+  const assignedProblems = getProblemsForTarget(selectedTarget);
+  const currentProblem = assignedProblems[activeProblemIndex];
 
   const handleStartHintQuiz = async () => {
-    if (!selectedTarget) return;
+    if (!selectedTarget || !currentProblem) return;
     setQuizLoading(true);
     setInHintQuiz(true);
     setQuizIndex(0);
@@ -206,10 +242,9 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
     setIsAnswered(false);
     setIsAnswerCorrect(false);
 
-    const prob = getProblemForTarget(selectedTarget);
-    const taskRef = prob ? prob.key : getTaskRef(selectedTarget.topic_kc_focus);
-    const title = selectedTarget.title || prob?.title || getKcDisplayName(selectedTarget.topic_kc_focus);
-    const probDescription = descLang === 'id' ? prob?.description_id : prob?.description_en;
+    const taskRef = currentProblem.key;
+    const title = currentProblem.title;
+    const probDescription = descLang === 'id' ? currentProblem.description_id : currentProblem.description_en;
     const desc = probDescription || selectedTarget.description || selectedTarget.target_task;
 
     try {
@@ -249,7 +284,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
 
   const handleCheckAnswer = async () => {
     const currentQuestion = quizQuestions[quizIndex];
-    if (!currentQuestion) return;
+    if (!currentQuestion || !currentProblem) return;
 
     let correct = false;
     if (currentQuestion.type === 'mc') {
@@ -264,10 +299,42 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
     setIsAnswerCorrect(correct);
     setIsAnswered(true);
 
+    if (!correct) {
+      // Show the Socratic feedback pre-generated with the quiz question
+      // (no extra LLM call), then persist it so it can be rated and logged.
+      const questionText = descLang === 'id' ? currentQuestion.text_id : currentQuestion.text_en;
+      const explanationText = descLang === 'id' ? currentQuestion.explanation_id : currentQuestion.explanation_en;
+      const studentAns = currentQuestion.type === 'mc' ? selectedOption : shortAnswer;
+      setQuizFeedback({ id: '', text: explanationText });
+
+      try {
+        const feedbackRes = await fetch('/api/exercises', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            _action: 'feedback',
+            problem_key: currentProblem.key,
+            question_text: questionText,
+            student_answer: studentAns,
+            feedback_text: explanationText,
+            lang: descLang
+          })
+        });
+
+        if (feedbackRes.ok) {
+          const data = await feedbackRes.json();
+          setQuizFeedback({ id: data.id, text: data.feedback_text });
+        }
+      } catch (err) {
+        console.error('Failed to save quiz feedback:', err);
+      }
+    }
+
     // Proactively notify backend of quiz completion if final question is correct
     if (quizIndex === 2 && correct && selectedTarget) {
-      const prob = getProblemForTarget(selectedTarget);
-      const taskRef = prob ? prob.key : getTaskRef(selectedTarget.topic_kc_focus);
+      const taskRef = currentProblem.key;
 
       try {
         await fetch('/api/exercises', {
@@ -292,6 +359,8 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
   };
 
   const handleNextQuestion = () => {
+    setQuizFeedback(null);
+    setQuizFeedbackRating(null);
     if (quizIndex < 2) {
       setQuizIndex(prev => prev + 1);
       setSelectedOption('');
@@ -300,9 +369,8 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
       setIsAnswerCorrect(false);
     } else {
       // Completed all 3 exercises
-      if (selectedTarget) {
-        const prob = getProblemForTarget(selectedTarget);
-        const taskRef = prob ? prob.key : getTaskRef(selectedTarget.topic_kc_focus);
+      if (selectedTarget && currentProblem) {
+        const taskRef = currentProblem.key;
         setQuizFinishedKeys(prev => {
           if (prev.includes(taskRef)) return prev;
           return [...prev, taskRef];
@@ -310,17 +378,37 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
       }
 
       setInHintQuiz(false);
-      setLastSubmissionTime(Date.now());
       setShowHintPrompt(false);
+    }
+  };
+
+  const handleRateFeedback = async (ratingValue: number) => {
+    if (!quizFeedback || !quizFeedback.id) return;
+    try {
+      const res = await fetch('/api/exercises', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          _action: 'rate',
+          feedback_id: quizFeedback.id,
+          rating: ratingValue,
+        }),
+      });
+      if (res.ok) {
+        setQuizFeedbackRating(ratingValue);
+      }
+    } catch (err) {
+      console.error('Failed to rate quiz feedback:', err);
     }
   };
 
   useEffect(() => {
     const checkQuizStatus = async () => {
-      if (!selectedTarget || problems.length === 0) return;
+      if (!selectedTarget || problems.length === 0 || !currentProblem) return;
 
-      const prob = getProblemForTarget(selectedTarget);
-      const taskRef = prob ? prob.key : getTaskRef(selectedTarget.topic_kc_focus);
+      const taskRef = currentProblem.key;
 
       if (quizFinishedKeys.includes(taskRef)) {
         return;
@@ -346,13 +434,15 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
     };
 
     checkQuizStatus();
-  }, [selectedTargetId, problems]);
+  }, [selectedTargetId, activeProblemIndex, problems]);
 
   const handleRetryQuestion = () => {
     setSelectedOption('');
     setShortAnswer('');
     setIsAnswered(false);
     setIsAnswerCorrect(false);
+    setQuizFeedback(null);
+    setQuizFeedbackRating(null);
   };
 
   useEffect(() => {
@@ -365,74 +455,96 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
           console.error('Failed to parse solved homeworks', e);
         }
       }
+
+      // Load solved problems per target
+      const loaded: Record<string, string[]> = {};
+      targets.forEach(t => {
+        const val = localStorage.getItem(`amt_solved_problems_${t.id}`);
+        if (val) {
+          try {
+            loaded[t.id] = JSON.parse(val);
+          } catch (e) { }
+        }
+      });
+      setSolvedProblemKeys(loaded);
     }
-  }, []);
+  }, [targets]);
 
   useEffect(() => {
-    const fetchProblems = async () => {
+    const fetchData = async () => {
       try {
-        const res = await fetch('/api/problems');
-        if (res.ok) {
-          const data = await res.json();
+        const [problemsRes, kcsRes] = await Promise.all([
+          fetch('/api/problems'),
+          fetch('/api/kcs')
+        ]);
+        if (problemsRes.ok) {
+          const data = await problemsRes.json();
           setProblems(data);
         }
+        if (kcsRes.ok) {
+          const data = await kcsRes.json();
+          setKcList(data);
+        }
       } catch (err) {
-        console.error('Failed to load problems:', err);
+        console.error('Failed to load data:', err);
       }
     };
-    fetchProblems();
+    fetchData();
   }, []);
 
-  // Load starter code when target ID or problems list changes
+  // Initialize activeProblemIndex to first unsolved problem on target change
   useEffect(() => {
     if (selectedTarget && problems.length > 0) {
-      const prob = getProblemForTarget(selectedTarget);
-      if (prob) {
-        setCode(prob.starter_code);
-      } else {
-        const ref = getTaskRef(selectedTarget.topic_kc_focus);
-        setCode(STARTER_CODES[ref] || STARTER_CODES['generic']);
-      }
-      setEvalResult(null);
-      setErrorMessage('');
-      setLastSubmissionTime(Date.now());
-      setShowHintPrompt(false);
+      const assigned = getProblemsForTarget(selectedTarget);
+      const targetSolved = solvedProblemKeys[selectedTarget.id] || [];
+      const firstUnsolvedIdx = assigned.findIndex(p => !targetSolved.includes(p.key));
+      const newIdx = firstUnsolvedIdx !== -1 ? firstUnsolvedIdx : 0;
+
+      setActiveProblemIndex(newIdx);
     }
   }, [selectedTargetId, problems]);
 
-  const getProblemForTarget = (target: WeeklyTarget | null): Problem | null => {
-    if (!target) return null;
-    
-    // 1. Try exact key match in DB problems
-    let found = problems.find(p => p.key.toLowerCase() === target.topic_kc_focus.toLowerCase());
-    if (found) return found;
+  // Load code when active problem changes
+  useEffect(() => {
+    if (selectedTarget && problems.length > 0) {
+      const assigned = getProblemsForTarget(selectedTarget);
+      const activeProb = assigned[activeProblemIndex];
+      if (activeProb) {
+        setCode(activeProb.starter_code);
+      } else {
+        setCode(DEFAULT_STARTER_CODE);
+      }
+      setEvalResult(null);
+      setErrorMessage('');
+      setShowHintPrompt(false);
+    }
+  }, [activeProblemIndex, selectedTargetId, problems]);
 
-    // 2. Try matching via getTaskRef fallback
-    const ref = getTaskRef(target.topic_kc_focus);
-    found = problems.find(p => p.key === ref);
-    if (found) return found;
-
-    // 3. Try fuzzy/inclusive match
-    found = problems.find(p =>
-      p.key.toLowerCase().includes(target.topic_kc_focus.toLowerCase()) ||
-      target.topic_kc_focus.toLowerCase().includes(p.key.toLowerCase())
-    );
-    return found || null;
-  };
-
-  const handleStartHomework = (target: WeeklyTarget) => {
+  const handleStartHomework = async (target: WeeklyTarget) => {
+    try {
+      await fetch('/api/student-logs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          event_type: 'click_solve_homework',
+          payload: {
+            homework_id: target.id,
+            topic_kc_focus: target.topic_kc_focus,
+            title: target.title,
+          },
+        }),
+      });
+    } catch (err) {
+      console.error('Failed to log click_solve_homework:', err);
+    }
     router.push(`/student/solve/${target.id}`);
   };
 
   const resetTemplate = () => {
-    if (selectedTarget) {
-      const prob = getProblemForTarget(selectedTarget);
-      if (prob) {
-        setCode(prob.starter_code);
-      } else {
-        const ref = getTaskRef(selectedTarget.topic_kc_focus);
-        setCode(STARTER_CODES[ref] || '');
-      }
+    if (currentProblem) {
+      setCode(currentProblem.starter_code);
       setEvalResult(null);
       setErrorMessage('');
     }
@@ -440,16 +552,14 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTarget) return;
+    if (!selectedTarget || !currentProblem) return;
 
     setSubmitting(true);
     setEvalResult(null);
     setErrorMessage('');
-    setLastSubmissionTime(Date.now());
     setShowHintPrompt(false);
 
-    const prob = getProblemForTarget(selectedTarget);
-    const taskRef = prob ? prob.key : getTaskRef(selectedTarget.topic_kc_focus);
+    const taskRef = currentProblem.key;
 
     try {
       const res = await fetch('/api/attempts', {
@@ -474,21 +584,44 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
 
       setEvalResult(data);
 
+      // Wrong submission: immediately offer the hint quiz (Misconception Probe).
+      // Also shown when the quiz was completed before — students can retake it.
+      if (!(data.success && data.passed)) {
+        setShowHintPrompt(true);
+      }
+
       if (data.success && data.passed) {
-        setSolvedTargetIds(prev => {
-          const updated = [...prev];
-          if (!updated.includes(selectedTarget.id)) {
-            updated.push(selectedTarget.id);
-            localStorage.setItem('amt_solved_homeworks', JSON.stringify(updated));
+        const targetId = selectedTarget.id;
+        const currentSolved = solvedProblemKeys[targetId] || [];
+
+        if (!currentSolved.includes(taskRef)) {
+          const newSolved = [...currentSolved, taskRef];
+          const updated = { ...solvedProblemKeys, [targetId]: newSolved };
+          setSolvedProblemKeys(updated);
+          localStorage.setItem(`amt_solved_problems_${targetId}`, JSON.stringify(newSolved));
+
+          // Check if all are completed
+          const assigned = getProblemsForTarget(selectedTarget);
+          const allSolved = assigned.every(p => newSolved.includes(p.key));
+          if (allSolved) {
+            setSolvedTargetIds(prev => {
+              const updatedTargets = [...prev];
+              if (!updatedTargets.includes(targetId)) {
+                updatedTargets.push(targetId);
+                localStorage.setItem('amt_solved_homeworks', JSON.stringify(updatedTargets));
+              }
+              return updatedTargets;
+            });
           }
-          return updated;
-        });
+        }
       }
     } catch (err: any) {
       console.error(err);
       setErrorMessage(err.message || 'Failed to submit attempt. Please make sure the backend is active.');
     } finally {
       setSubmitting(false);
+      // Slide the results pane up so the verdict and test cases are visible without dragging
+      setVSplitRatio(v => Math.min(v, REVEAL_VSPLIT));
     }
   };
 
@@ -507,7 +640,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
 
   if (view === 'list') {
     return (
-      <div className="space-y-8 max-w-6xl">
+      <div className="space-y-8 max-w-6xl mx-auto">
         <div className="rounded-2xl border border-teal-150 bg-gradient-to-r from-teal-50/70 to-emerald-50/70 p-6 shadow-xs">
           <div className="flex items-start space-x-4">
             <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-teal-500/10 border border-teal-500/20 text-teal-600">
@@ -566,11 +699,12 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
               {targets.map((target, idx) => {
                 const unlocked = isTargetUnlocked(idx);
                 const completed = isTargetCompleted(target);
-                const prob = getProblemForTarget(target);
-                const title = target.title || prob?.title || getKcDisplayName(target.topic_kc_focus);
-                const probDescription = descLang === 'id' ? prob?.description_id : prob?.description_en;
-                const description = probDescription || target.description || target.target_task;
-                const deadline = isMounted && target.deadline ? formatDeadline(target.deadline) : getDeadlineForWeek(target.week);
+                const assigned = getProblemsForTarget(target);
+                const solvedCount = (solvedProblemKeys[target.id] || []).length;
+
+                const title = target.title || (assigned.length === 1 ? assigned[0].title : '') || getKcDisplayName(target.topic_kc_focus, kcList);
+                const description = target.description || target.target_task;
+                const deadline = isMounted && target.deadline ? formatDeadline(target.deadline) : `Week ${target.week} deadline`;
 
                 let cardClass = '';
                 if (!unlocked) {
@@ -588,9 +722,16 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
                   >
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                          Homework {target.week}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                            Homework {target.week}
+                          </span>
+                          {target.randomize_problems && (
+                            <span className="inline-flex items-center gap-1 text-[8px] bg-violet-50 text-violet-700 border border-violet-100 px-1.5 py-0.2 rounded-full font-bold">
+                              <Shuffle className="h-2 w-2" /> Random
+                            </span>
+                          )}
+                        </div>
 
                         {completed ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
@@ -598,7 +739,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
                           </span>
                         ) : unlocked ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 border border-indigo-150 px-2.5 py-0.5 text-[10px] font-bold text-indigo-700">
-                            <Unlock className="h-3 w-3" /> Unlocked
+                            <Unlock className="h-3 w-3" /> Unlocked ({solvedCount}/{assigned.length})
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[10px] font-bold text-slate-500">
@@ -612,7 +753,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
                           {title}
                         </h3>
                         <p className="text-[11px] text-slate-450 mt-1 font-semibold">
-                          Focus: {getKcDisplayName(target.topic_kc_focus)}
+                          Focus: {getKcDisplayName(target.topic_kc_focus, kcList)}
                         </p>
                         <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed mt-2">
                           {description}
@@ -623,7 +764,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
                     <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between">
                       <div className="flex items-center space-x-1.5 text-slate-450 text-[11px] font-medium">
                         <Clock className="h-3.5 w-3.5" />
-                        <span>Due: {deadline}</span>
+                        <span className="truncate max-w-[150px]">Due: {deadline}</span>
                       </div>
 
                       {unlocked ? (
@@ -671,10 +812,36 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
     const currentQuestion = quizQuestions[quizIndex];
     if (!currentQuestion) return null;
 
+    const questionText = descLang === 'id' ? currentQuestion.text_id : currentQuestion.text_en;
+    const explanationText = descLang === 'id' ? currentQuestion.explanation_id : currentQuestion.explanation_en;
+    const options = descLang === 'id' ? currentQuestion.options_id : currentQuestion.options_en;
+
     return (
       <div className="max-w-2xl mx-auto space-y-6 my-4">
         {/* Header */}
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-between">
+          <div className="flex bg-slate-105 p-0.5 rounded-lg border border-slate-250/50">
+            <button
+              type="button"
+              onClick={() => setDescLang('en')}
+              className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-all ${descLang === 'en'
+                ? 'bg-white text-slate-800 shadow-2xs'
+                : 'text-slate-400 hover:text-slate-700'
+                }`}
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              onClick={() => setDescLang('id')}
+              className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-all ${descLang === 'id'
+                ? 'bg-white text-slate-800 shadow-2xs'
+                : 'text-slate-400 hover:text-slate-700'
+                }`}
+            >
+              ID
+            </button>
+          </div>
           <span className="text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full">
             Question {quizIndex + 1} of 3
           </span>
@@ -700,7 +867,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
           <div className="space-y-2">
             <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Concept Check</span>
             <h3 className="text-sm font-extrabold text-slate-900 leading-relaxed">
-              {currentQuestion.text}
+              {questionText}
             </h3>
             {currentQuestion.code && (
               <pre className="p-4 bg-slate-50 rounded-xl text-xs font-mono text-slate-700 overflow-x-auto border border-slate-200 leading-relaxed mt-3">
@@ -713,7 +880,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
           <div className="space-y-4 pt-2">
             {currentQuestion.type === 'mc' ? (
               <div className="grid grid-cols-1 gap-3">
-                {currentQuestion.options?.map((opt: string, idx: number) => {
+                {options?.map((opt: string, idx: number) => {
                   const letter = String.fromCharCode(65 + idx);
                   const isSelected = selectedOption === letter;
                   const showResult = isAnswered;
@@ -774,6 +941,46 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
             )}
           </div>
 
+          {/* Socratic LLM Feedback for incorrect answer */}
+          {isAnswered && !isAnswerCorrect && (
+            <div className="mt-4 p-4 rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/40 to-purple-50/40 space-y-2.5">
+              {quizFeedback ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2 text-indigo-900">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 border border-indigo-500/25 text-indigo-600">
+                        <Sparkles className="h-4 w-4" />
+                      </div>
+                      <span className="text-xs font-bold uppercase tracking-wider">Tutor Guidance</span>
+                    </div>
+                    {/* Thumbs up / down buttons */}
+                    <div className="flex items-center space-x-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleRateFeedback(1)}
+                        className={`p-1.5 rounded-lg transition-colors ${quizFeedbackRating === 1 ? 'bg-indigo-105 text-indigo-705 border border-indigo-200' : 'hover:bg-slate-100 text-slate-400 border border-transparent'}`}
+                        title="Feedback was helpful"
+                      >
+                        <ThumbsUp className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRateFeedback(-1)}
+                        className={`p-1.5 rounded-lg transition-colors ${quizFeedbackRating === -1 ? 'bg-indigo-105 text-indigo-705 border border-indigo-200' : 'hover:bg-slate-100 text-slate-400 border border-transparent'}`}
+                        title="Feedback was not helpful"
+                      >
+                        <ThumbsDown className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-line font-medium">
+                    {quizFeedback.text}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          )}
+
           {/* Feedback & Navigation Actions */}
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
             <div className="flex-1 pr-4">
@@ -788,7 +995,10 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
                     <h5 className={`font-bold ${isAnswerCorrect ? 'text-emerald-950' : 'text-rose-950'}`}>
                       {isAnswerCorrect ? 'Correct!' : 'Incorrect, try again!'}
                     </h5>
-                    <p className="text-[11px] text-slate-500 mt-0.5">{currentQuestion.explanation}</p>
+                    {/* On incorrect answers the Tutor Guidance box above shows the feedback */}
+                    {isAnswerCorrect && (
+                      <p className="text-[11px] text-slate-500 mt-0.5">{explanationText}</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -829,93 +1039,108 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
     );
   }
 
-  const prob = getProblemForTarget(selectedTarget);
-  const title = selectedTarget?.title || prob?.title || getKcDisplayName(selectedTarget?.topic_kc_focus);
-  const deadline = selectedTarget
-    ? (isMounted && selectedTarget.deadline ? formatDeadline(selectedTarget.deadline) : getDeadlineForWeek(selectedTarget.week))
-    : '';
+  const title = selectedTarget?.title || (assignedProblems.length === 1 ? assignedProblems[0].title : '') || getKcDisplayName(selectedTarget?.topic_kc_focus ?? '', kcList);
+  const deadline = selectedTarget && isMounted && selectedTarget.deadline ? formatDeadline(selectedTarget.deadline) : 'No deadline';
+  const hasResultsContent = Boolean(evalResult || errorMessage || showHintPrompt);
 
   return (
-    <div className="space-y-6 max-w-6xl">
-      {showHintPrompt && (
-        <div className="bg-indigo-50 border border-indigo-150 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xs animate-pulse">
-          <div className="flex items-center space-x-3">
-            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600">
-              <Sparkles className="h-5 w-5" />
-            </div>
-            <div>
-              <h4 className="text-xs font-extrabold text-indigo-900">Stuck or need a concept refresher?</h4>
-              <p className="text-[11px] text-indigo-700 mt-0.5">Solve a short interactive exercise to build a deeper understanding.</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleStartHintQuiz}
-            className="flex items-center gap-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:brightness-105 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-xs hover:shadow-md cursor-pointer shrink-0"
-          >
-            <span>(Butuh pemahaman lebih dalam?)</span>
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-5">
-        <div className="flex items-center space-x-3.5">
+    <div className="flex flex-col gap-3 lg:h-[calc(100vh-6rem)]">{/* 6rem = shell header (4rem) + main padding (1rem top + 1rem bottom) */}
+      {/* Compact Header: back button, title, problems stepper, and progress in one bar */}
+      <div className="bg-white rounded-xl border border-slate-200 px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex items-center space-x-2.5 min-w-0">
           <button
             onClick={() => router.push('/student')}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50 shadow-2xs transition-all"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50 shadow-2xs transition-all"
             title="Go back to list"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-3.5 w-3.5" />
           </button>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
+              <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wider">
                 Homework {selectedTarget?.week}
               </span>
-              <span className="text-[9px] font-bold text-slate-400 border border-slate-200 px-1.5 py-0.2 rounded-md">
+              <span className="hidden sm:inline-block text-[8px] font-bold text-slate-400 border border-slate-200 px-1.5 py-0.2 rounded-md">
                 Due: {deadline}
               </span>
+              {selectedTarget && isTargetCompleted(selectedTarget) && (
+                <span className="flex items-center gap-1 text-[8px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded-full">
+                  <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" />
+                  <span>Solved</span>
+                </span>
+              )}
             </div>
-            <h1 className="text-lg font-bold text-slate-900 leading-snug">
+            <h1 className="text-xs font-bold text-slate-900 leading-snug truncate">
               {title}
             </h1>
           </div>
         </div>
 
-        {selectedTarget && isTargetCompleted(selectedTarget) && (
-          <div className="self-start sm:self-center flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3.5 py-1.5 rounded-full shadow-2xs">
-            <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600" />
-            <span>Solved & Verified</span>
-          </div>
-        )}
+        <div className="hidden sm:block h-7 w-px bg-slate-200" />
+
+        <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
+          {assignedProblems.map((prob, idx) => {
+            const targetSolved = solvedProblemKeys[selectedTarget?.id ?? ''] || [];
+            const isSolved = targetSolved.includes(prob.key);
+            const isActive = idx === activeProblemIndex;
+            const isUnlocked = idx === 0 || assignedProblems.slice(0, idx).every(p => targetSolved.includes(p.key));
+
+            return (
+              <button
+                key={prob.id}
+                type="button"
+                disabled={!isUnlocked}
+                onClick={() => setActiveProblemIndex(idx)}
+                className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-all flex items-center gap-1.5 ${isActive
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm cursor-default'
+                  : !isUnlocked
+                    ? 'bg-slate-50 text-slate-400 border-slate-150 cursor-not-allowed opacity-60'
+                    : isSolved
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100/50'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-350'
+                  }`}
+              >
+                {!isUnlocked && <Lock className="h-3 w-3 text-slate-400" />}
+                {isSolved && <CheckCircle2 className="h-3 w-3 text-emerald-650" />}
+                <span>{idx + 1}. {prob.title}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="text-[11px] font-bold text-slate-500 ml-auto shrink-0">
+          {(solvedProblemKeys[selectedTarget?.id ?? ''] || []).length} / {assignedProblems.length} Solved
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-5 space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Problem Statement</h2>
+      {/* Resizable Split: Problem Statement | Pseudocode Workspace (drag the divider) */}
+      <div ref={splitContainerRef} className="flex flex-col lg:flex-row items-stretch gap-4 lg:gap-1 flex-1 min-h-0">
+        {/* Problem Statement Panel */}
+        <div
+          className="min-w-0 w-full lg:w-[var(--split-w)] lg:shrink-0"
+          style={{ '--split-w': `${splitRatio}%` } as React.CSSProperties}
+        >
+          <div className="h-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-4 lg:overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Problem Statement</h2>
               <div className="flex bg-slate-105 p-0.5 rounded-lg border border-slate-200/50">
                 <button
                   type="button"
                   onClick={() => setDescLang('en')}
-                  className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-all ${
-                    descLang === 'en'
-                      ? 'bg-white text-slate-800 shadow-2xs'
-                      : 'text-slate-400 hover:text-slate-700'
-                  }`}
+                  className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-all ${descLang === 'en'
+                    ? 'bg-white text-slate-800 shadow-2xs'
+                    : 'text-slate-400 hover:text-slate-700'
+                    }`}
                 >
                   EN
                 </button>
                 <button
                   type="button"
                   onClick={() => setDescLang('id')}
-                  className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-all ${
-                    descLang === 'id'
-                      ? 'bg-white text-slate-800 shadow-2xs'
-                      : 'text-slate-400 hover:text-slate-700'
-                  }`}
+                  className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-all ${descLang === 'id'
+                    ? 'bg-white text-slate-800 shadow-2xs'
+                    : 'text-slate-400 hover:text-slate-700'
+                    }`}
                 >
                   ID
                 </button>
@@ -923,18 +1148,18 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
             </div>
 
             <div>
-              <div className="prose prose-sm text-slate-600 text-xs leading-relaxed whitespace-pre-line">
-                {(descLang === 'id' ? prob?.description_id : prob?.description_en) || selectedTarget?.description || selectedTarget?.target_task}
+              <div className="prose prose-sm text-slate-600 text-[11px] leading-relaxed whitespace-pre-line">
+                {(descLang === 'id' ? currentProblem?.description_id : currentProblem?.description_en) || selectedTarget?.description || selectedTarget?.target_task}
               </div>
             </div>
 
-            {prob?.test_cases && prob.test_cases.length > 0 && (
-              <div className="border-t border-slate-100 pt-4 space-y-3">
-                <h3 className="text-xs font-bold text-slate-700">Sample Test Cases</h3>
-                <div className="space-y-2.5">
-                  {prob.test_cases.slice(0, 2).map((tc, idx) => (
-                    <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-100 font-mono text-[11px] space-y-1.5">
-                      <div className="text-[10px] text-slate-400 font-sans font-bold">SAMPLE #{idx + 1}</div>
+            {currentProblem?.test_cases && currentProblem.test_cases.length > 0 && (
+              <div className="border-t border-slate-100 pt-3 space-y-2.5">
+                <h3 className="text-[11px] font-bold text-slate-700">Sample Test Cases</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {currentProblem.test_cases.slice(0, 2).map((tc, idx) => (
+                    <div key={idx} className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 font-mono text-[10px] space-y-1">
+                      <div className="text-[9px] text-slate-400 font-sans font-bold">SAMPLE #{idx + 1}</div>
                       <div className="flex justify-between">
                         <div>
                           <span className="text-slate-400 select-none">Input:</span> <span className="text-slate-800 font-semibold">{tc.input.replace(/\n/g, ' ')}</span>
@@ -951,148 +1176,251 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
           </div>
         </div>
 
-        <div className="lg:col-span-7 space-y-6">
-          <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between">
-              <div className="flex items-center space-x-2 text-slate-800">
-                <Code2 className="h-4.5 w-4.5 text-indigo-600" />
-                <span className="text-sm font-bold">Pseudocode Workspace (.dap)</span>
-              </div>
-              <button
-                type="button"
-                onClick={resetTemplate}
-                className="flex items-center space-x-1 text-slate-400 hover:text-slate-600 transition-colors text-xs font-semibold"
-              >
-                <RefreshCw className="h-3 w-3" />
-                <span>Reset Starter Code</span>
-              </button>
-            </div>
+        {/* Drag Handle (LeetCode-style resizer) */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          title="Drag to resize — double-click to reset"
+          onMouseDown={(e) => startPaneDrag(e, 'x')}
+          onTouchStart={(e) => startPaneDrag(e, 'x')}
+          onDoubleClick={() => setSplitRatio(DEFAULT_SPLIT)}
+          className="hidden lg:flex w-2 shrink-0 cursor-col-resize items-center justify-center group"
+        >
+          <div className="h-14 w-1 rounded-full bg-slate-300 transition-all duration-200 group-hover:h-24 group-hover:bg-indigo-500 group-active:h-24 group-active:bg-indigo-600" />
+        </div>
 
-            <div className="relative bg-slate-900 p-1">
-              <DapCodeEditor
-                value={code}
-                onChange={setCode}
-                rows={16}
-              />
-            </div>
-
-            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50/50 flex items-center justify-between">
-              <span className="text-[10px] text-slate-400 font-medium">Compiler: DAP compiler (Go build)</span>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="flex items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:brightness-105 hover:shadow-lg active:scale-[0.98] disabled:scale-100 px-6 py-3 text-xs font-bold text-white transition-all disabled:opacity-50"
-              >
-                {submitting ? (
-                  <>
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                    <span>Evaluating Submission...</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4 fill-white" />
-                    <span>Run & Verify Code</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-
-          {errorMessage && (
-            <div className="rounded-xl border border-red-200 bg-red-50/40 p-4 text-xs text-red-800 flex items-start space-x-3">
-              <AlertCircle className="h-5 w-5 flex-shrink-0 text-red-500 mt-0.5" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
-
-          {evalResult && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                <h3 className="text-sm font-bold text-slate-800">Verification Result</h3>
-
-                {evalResult.success && evalResult.passed ? (
-                  <div className="flex items-center text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full text-xs font-bold gap-1.5 shadow-2xs">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    <span>Passed All Test Cases!</span>
-                  </div>
-                ) : !evalResult.success ? (
-                  <div className="flex items-center text-red-700 bg-red-55/10 border border-red-150 px-3 py-1 rounded-full text-xs font-bold gap-1.5 shadow-2xs">
-                    <XCircle className="h-4 w-4 text-red-500" />
-                    <span>Compilation Error</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full text-xs font-bold gap-1.5 shadow-2xs">
-                    <XCircle className="h-4 w-4 text-amber-500" />
-                    <span>Failed Test Cases</span>
-                  </div>
-                )}
-              </div>
-
-              {evalResult.compilation_error && (
-                <div className="space-y-2">
-                  <h4 className="text-xs font-bold text-slate-700">Compiler Diagnostic Logs</h4>
-                  <pre className="p-4 bg-slate-900 rounded-xl text-xs font-mono text-red-400 overflow-x-auto border border-slate-800 leading-relaxed">
-                    {evalResult.compilation_error}
-                  </pre>
+        {/* Right Column: Pseudocode Workspace over the results pane (drag the row divider) */}
+        <div ref={rightColRef} className="min-w-0 w-full lg:flex-1 flex flex-col gap-4 lg:gap-0 min-h-0">
+          {/* Editor Pane */}
+          <div
+            className={`flex flex-col min-h-0 lg:h-[var(--v-split)] lg:shrink-0 ${isPaneDragging ? '' : 'lg:transition-[height] lg:duration-500 lg:ease-out'}`}
+            style={{ '--v-split': `${vSplitRatio}%` } as React.CSSProperties}
+          >
+            <form onSubmit={handleSubmit} className="h-full min-h-0 rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm flex flex-col">
+              <div className="px-3 sm:px-4 py-2 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between gap-3">
+                <div className="flex items-center space-x-2 text-slate-800 min-w-0">
+                  <Code2 className="h-4 w-4 text-indigo-600 shrink-0" />
+                  <span className="text-xs font-bold truncate">Pseudocode Workspace (.dap)</span>
                 </div>
-              )}
+                <div className="flex items-center gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={resetTemplate}
+                    className="flex items-center space-x-1 text-slate-400 hover:text-slate-600 transition-colors text-[11px] font-semibold"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    <span className="hidden sm:inline">Reset Starter Code</span>
+                    <span className="sm:hidden">Reset</span>
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex items-center justify-center space-x-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 hover:brightness-105 hover:shadow-md active:scale-[0.98] disabled:scale-100 px-3.5 py-1.5 text-[11px] font-bold text-white transition-all disabled:opacity-50"
+                  >
+                    {submitting ? (
+                      <>
+                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                        <span>Evaluating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-3.5 w-3.5 fill-white" />
+                        <span>Run & Verify Code</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
 
-              {evalResult.feedback && (
-                <div className="rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/40 to-purple-50/40 p-4 space-y-2.5">
-                  <div className="flex items-center space-x-2 text-indigo-900">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 border border-indigo-500/25 text-indigo-600">
-                      <Sparkles className="h-4 w-4" />
+              <div className="relative bg-slate-900 p-1 flex-1 min-h-0">
+                <DapCodeEditor
+                  value={code}
+                  onChange={setCode}
+                  rows={16}
+                  fillHeight
+                />
+              </div>
+            </form>
+          </div>
+
+          {/* Row Drag Handle (resize editor vs results) */}
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            title="Drag to resize — double-click to reset"
+            onMouseDown={(e) => startPaneDrag(e, 'y')}
+            onTouchStart={(e) => startPaneDrag(e, 'y')}
+            onDoubleClick={() => setVSplitRatio(DEFAULT_VSPLIT)}
+            className="hidden lg:flex h-2 shrink-0 cursor-row-resize items-center justify-center group"
+          >
+            <div className="w-14 h-1 rounded-full bg-slate-300 transition-all duration-200 group-hover:w-24 group-hover:bg-indigo-500 group-active:w-24 group-active:bg-indigo-600" />
+          </div>
+
+          {/* Results Pane: white panel (LeetCode-style) holding error, hint prompt, and verification result */}
+          <div className={`flex-1 min-h-0 rounded-2xl border border-slate-200 bg-white shadow-sm lg:overflow-y-auto p-4 space-y-3 ${hasResultsContent ? '' : 'hidden lg:block'}`}>
+            {errorMessage && (
+              <div className="rounded-xl border border-red-200 bg-red-50/40 p-3 text-[11px] text-red-800 flex items-start space-x-2.5">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 text-red-500 mt-0.5" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            {evalResult && (
+              <div className="animate-slide-up-fade space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="text-xs font-bold text-slate-800">Verification Result</h3>
+
+                  {evalResult.success && evalResult.passed ? (
+                    <div className="flex items-center text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[10px] font-bold gap-1.5 shadow-2xs">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>Passed All Test Cases!</span>
                     </div>
-                    <span className="text-xs font-bold uppercase tracking-wider">Tutor Guidance</span>
-                  </div>
-                  <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">
-                    {evalResult.feedback}
-                  </div>
+                  ) : !evalResult.success ? (
+                    <div className="flex items-center text-red-700 bg-red-55/10 border border-red-150 px-2.5 py-0.5 rounded-full text-[10px] font-bold gap-1.5 shadow-2xs">
+                      <XCircle className="h-3.5 w-3.5 text-red-500" />
+                      <span>Compilation Error</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full text-[10px] font-bold gap-1.5 shadow-2xs">
+                      <XCircle className="h-3.5 w-3.5 text-amber-500" />
+                      <span>Failed Test Cases</span>
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {evalResult.test_results && evalResult.test_results.length > 0 && (
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold text-slate-700">Test Case Results</h4>
-                  <div className="space-y-3">
-                    {evalResult.test_results.map((tc: any) => (
-                      <div key={tc.test_case_index} className="rounded-xl border border-slate-150 p-4 space-y-3 bg-slate-50/50">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-slate-700">Test Case #{tc.test_case_index}</span>
-                          {tc.passed ? (
-                            <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 flex items-center gap-1 text-[11px]">
-                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Pass
-                            </span>
-                          ) : (
-                            <span className="text-red-700 font-bold bg-red-55/10 px-2 py-0.5 rounded-md border border-red-150 flex items-center gap-1 text-[11px]">
-                              <XCircle className="h-3.5 w-3.5 text-red-500" /> Fail
-                            </span>
+                {evalResult.success && evalResult.passed && activeProblemIndex < assignedProblems.length - 1 && (
+                  <div className="flex justify-end pt-1 border-b border-slate-100 pb-3">
+                    <button
+                      type="button"
+                      onClick={() => setActiveProblemIndex(prev => prev + 1)}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-bold bg-emerald-600 text-white hover:bg-emerald-750 transition-all hover:shadow-md cursor-pointer"
+                    >
+                      <span>Go to Next Problem</span>
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {evalResult.compilation_error && (
+                  <div className="space-y-1.5">
+                    <h4 className="text-[11px] font-bold text-slate-700">Compiler Diagnostic Logs</h4>
+                    <pre className="p-3 bg-slate-900 rounded-xl text-[11px] font-mono text-red-400 overflow-x-auto border border-slate-800 leading-relaxed">
+                      {evalResult.compilation_error}
+                    </pre>
+                  </div>
+                )}
+
+                {/* Logic Hints: misconceptions detected by AST diff against the reference solution */}
+                {evalResult.misconceptions && evalResult.misconceptions.length > 0 && (
+                  <div className="animate-slide-up-fade rounded-xl border border-amber-200 bg-amber-50/40 p-3 space-y-2">
+                    <div className="flex items-center gap-1.5 text-amber-800">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      <h4 className="text-[11px] font-extrabold uppercase tracking-wider">Logic Hints</h4>
+                    </div>
+                    <div className="space-y-2">
+                      {evalResult.misconceptions.map((m: any, idx: number) => (
+                        <div key={idx} className="rounded-lg border border-amber-100 bg-white/70 p-2.5 space-y-1">
+                          <div className="text-[11px] font-bold text-slate-800">
+                            {m.title}
+                            {m.code && m.code !== 'GEN' && (
+                              <span className="ml-1.5 text-[9px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.2 rounded-full">{m.code}</span>
+                            )}
+                          </div>
+                          {m.description && (
+                            <p className="text-[10px] text-slate-600 leading-relaxed">{m.description}</p>
+                          )}
+                          {m.buggy_expr && (
+                            <div className="text-[10px] font-mono text-amber-900 bg-amber-50 border border-amber-100 rounded-md px-2 py-1 overflow-x-auto whitespace-pre">
+                              {m.buggy_expr}
+                            </div>
                           )}
                         </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                        <div className="grid grid-cols-3 gap-4 text-xs font-mono">
-                          <div className="space-y-1">
-                            <span className="text-[10px] text-slate-400 font-sans block font-semibold">Stdin Input</span>
-                            <div className="p-2 bg-white border border-slate-200 rounded-md text-slate-700 whitespace-pre">{tc.input || '(empty)'}</div>
+                {/* Hint Quiz (Misconception Probe) prompt — directly above the Verification Result */}
+                {showHintPrompt && (
+                  <div className="animate-slide-up-fade rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50 to-violet-50 p-3 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start sm:items-center space-x-2.5">
+                      <div className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-600">
+                        <Sparkles className="h-4 w-4" />
+                        <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-indigo-500 animate-ping" />
+                        <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-indigo-500" />
+                      </div>
+                      <div>
+                        <h4 className="text-[11px] font-extrabold text-indigo-900">
+                          {descLang === 'id' ? 'Butuh pemahaman lebih dalam?' : 'Stuck or need a concept refresher?'}
+                        </h4>
+                        <p className="text-[10px] text-indigo-700 mt-0.5">
+                          {descLang === 'id'
+                            ? 'Kerjakan kuis konsep singkat untuk menemukan letak miskonsepsimu sebelum mencoba lagi.'
+                            : 'Take a short concept quiz to uncover the misconception before your next attempt.'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleStartHintQuiz}
+                      className="flex items-center justify-center gap-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:brightness-105 text-white font-bold text-[11px] px-3 py-2 rounded-lg transition-all shadow-xs hover:shadow-md cursor-pointer shrink-0 w-full sm:w-auto"
+                    >
+                      <span>{descLang === 'id' ? 'Mulai Kuis Konsep' : 'Start Concept Quiz'}</span>
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {evalResult.test_results && evalResult.test_results.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="text-[11px] font-bold text-slate-700">Test Case Results</h4>
+                    <div className="space-y-2.5">
+                      {evalResult.test_results.map((tc: any) => (
+                        <div key={tc.test_case_index} className="rounded-xl border border-slate-150 p-3 space-y-2.5 bg-slate-50/50">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-bold text-slate-700">Test Case #{tc.test_case_index}</span>
+                            {tc.passed ? (
+                              <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 flex items-center gap-1 text-[10px]">
+                                <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Pass
+                              </span>
+                            ) : (
+                              <span className="text-red-700 font-bold bg-red-55/10 px-2 py-0.5 rounded-md border border-red-150 flex items-center gap-1 text-[10px]">
+                                <XCircle className="h-3 w-3 text-red-500" /> Fail
+                              </span>
+                            )}
                           </div>
-                          <div className="space-y-1">
-                            <span className="text-[10px] text-slate-400 font-sans block font-semibold">Expected Output</span>
-                            <div className="p-2 bg-white border border-slate-200 rounded-md text-slate-700 whitespace-pre">{tc.expected}</div>
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-[10px] text-slate-400 font-sans block font-semibold">Actual Output</span>
-                            <div className={`p-2 border rounded-md whitespace-pre ${tc.passed ? 'bg-white border-slate-200 text-slate-700' : 'bg-red-50/30 border-red-150 text-red-700'}`}>
-                              {tc.error ? `Error: ${tc.error}` : (tc.actual || '(no output)')}
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 text-[11px] font-mono">
+                            <div className="space-y-1">
+                              <span className="text-[9px] text-slate-400 font-sans block font-semibold">Stdin Input</span>
+                              <div className="p-2 bg-white border border-slate-200 rounded-md text-slate-700 whitespace-pre">{tc.input || '(empty)'}</div>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[9px] text-slate-400 font-sans block font-semibold">Expected Output</span>
+                              <div className="p-2 bg-white border border-slate-200 rounded-md text-slate-700 whitespace-pre">{tc.expected}</div>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[9px] text-slate-400 font-sans block font-semibold">Actual Output</span>
+                              <div className={`p-2 border rounded-md whitespace-pre ${tc.passed ? 'bg-white border-slate-200 text-slate-700' : 'bg-red-50/30 border-red-150 text-red-700'}`}>
+                                {tc.error ? `Error: ${tc.error}` : (tc.actual || '(no output)')}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+
+            {/* Empty state: shown before the first run (LeetCode-style) */}
+            {!hasResultsContent && (
+              <div className="h-full min-h-24 flex items-center justify-center">
+                <span className="text-[11px] font-semibold text-slate-400">You must run your code first.</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

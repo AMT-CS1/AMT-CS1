@@ -19,6 +19,8 @@ class AttemptResponse(BaseModel):
     source: str
     timestamp: datetime
     confidence_level: float | None
+    passed: bool | None = False
+    ast_ref: str | None = None
 
     class Config:
         from_attributes = True
@@ -31,6 +33,13 @@ class TestCaseResultSchema(BaseModel):
     passed: bool
     error: Optional[str] = None
 
+class MisconceptionSchema(BaseModel):
+    code: str
+    title: str
+    description: str
+    detail: str
+    buggy_expr: str
+
 class AttemptEvaluationResponse(BaseModel):
     attempt: AttemptResponse
     success: bool
@@ -38,4 +47,5 @@ class AttemptEvaluationResponse(BaseModel):
     compilation_error: Optional[str] = None
     test_results: List[TestCaseResultSchema]
     feedback: Optional[str] = None
+    misconceptions: Optional[List[MisconceptionSchema]] = None
 

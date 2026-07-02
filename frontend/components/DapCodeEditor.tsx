@@ -8,6 +8,8 @@ interface DapCodeEditorProps {
   placeholder?: string;
   rows?: number;
   readOnly?: boolean;
+  /** Stretch to fill the parent's height (falls back to rows-based height when the parent is unconstrained). */
+  fillHeight?: boolean;
 }
 
 export default function DapCodeEditor({
@@ -16,6 +18,7 @@ export default function DapCodeEditor({
   placeholder = '// Write your DAP program here...',
   rows = 14,
   readOnly = false,
+  fillHeight = false,
 }: DapCodeEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
@@ -58,7 +61,7 @@ export default function DapCodeEditor({
     const patterns = [
       { name: 'comment', regex: /\/\/.*|#.*/ },
       { name: 'string', regex: /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/ },
-      { name: 'keyword', regex: /\b(?:program|dictionary|kamus|algorithm|endprogram|if|then|else|endif|while|do|endwhile|for|to|endfor|read|write|input|output|print)\b/ },
+      { name: 'keyword', regex: /\b(?:program|dictionary|kamus|algorithm|endprogram|if|then|else|endif|while|do|endwhile|for|to|endfor|read|write|input|output|print|mod|div|const)\b/ },
       { name: 'type', regex: /\b(?:integer|real|string|boolean|char)\b/ },
       { name: 'operator', regex: /<-|<=|>=|!=|[-+*/=]/ },
       { name: 'number', regex: /\b\d+\b/ },
@@ -106,15 +109,20 @@ export default function DapCodeEditor({
     });
   };
 
+  const rowsHeight = `${rows * 1.5 + 2}rem`;
+  const heightStyle = fillHeight
+    ? { height: '100%', minHeight: '10rem' }
+    : { height: rowsHeight };
+
   return (
-    <div className="relative w-full rounded-lg bg-[#eff1f5] border border-[#ccd0da] font-mono text-xs overflow-hidden dap-editor-container">
+    <div className={`relative w-full rounded-lg bg-[#eff1f5] border border-[#ccd0da] font-mono text-xs overflow-hidden dap-editor-container ${fillHeight ? 'h-full' : ''}`}>
       {/* Scrollable Highlighted Pre Element */}
       <pre
         ref={preRef}
         aria-hidden="true"
         className="w-full pointer-events-none absolute top-0 left-0 m-0 p-4 leading-relaxed whitespace-pre overflow-hidden text-[#4c4f69]"
         style={{
-          height: `${rows * 1.5 + 2}rem`,
+          ...heightStyle,
           fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
         }}
         dangerouslySetInnerHTML={{ __html: highlightDapCode(value) + '\n' }}
@@ -133,7 +141,7 @@ export default function DapCodeEditor({
         readOnly={readOnly}
         className="w-full block m-0 p-4 bg-transparent text-transparent caret-[#1e66f5] focus:outline-hidden focus:ring-0 border-0 resize-none leading-relaxed whitespace-pre overflow-auto placeholder-[#acb0be]"
         style={{
-          height: `${rows * 1.5 + 2}rem`,
+          ...heightStyle,
           fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
         }}
       />

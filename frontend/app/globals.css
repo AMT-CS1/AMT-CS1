@@ -12,6 +12,21 @@
   --font-mono: var(--font-geist-mono);
 }
 
+@theme {
+  --animate-slide-up-fade: slide-up-fade 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+
+  @keyframes slide-up-fade {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

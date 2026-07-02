@@ -10,8 +10,16 @@ class HintQuizQuestion(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     problem_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(10), nullable=False)  # "mc" or "sa"
-    text: Mapped[str] = mapped_column(Text, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=True)
     code: Mapped[str] = mapped_column(Text, nullable=True)
     options: Mapped[list] = mapped_column(JSONB, nullable=True)  # list of 4 strings
     answer: Mapped[str] = mapped_column(String(255), nullable=False)
-    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    explanation: Mapped[str] = mapped_column(Text, nullable=True)
+    
+    # Bilingual support columns
+    text_en: Mapped[str] = mapped_column(Text, nullable=True)
+    text_id: Mapped[str] = mapped_column(Text, nullable=True)
+    options_en: Mapped[list] = mapped_column(JSONB, nullable=True)
+    options_id: Mapped[list] = mapped_column(JSONB, nullable=True)
+    explanation_en: Mapped[str] = mapped_column(Text, nullable=True)
+    explanation_id: Mapped[str] = mapped_column(Text, nullable=True)

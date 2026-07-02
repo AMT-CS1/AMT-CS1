@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, Text, DateTime
+from sqlalchemy import String, Integer, Text, DateTime, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
 
@@ -16,3 +16,5 @@ class WeeklyTarget(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=True)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     deadline: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    randomize_problems: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+

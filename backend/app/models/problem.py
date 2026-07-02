@@ -14,3 +14,7 @@ class Problem(Base):
     description_id: Mapped[str] = mapped_column(Text, nullable=False)
     starter_code: Mapped[str] = mapped_column(Text, nullable=False)
     test_cases: Mapped[list] = mapped_column(JSONB, nullable=False)
+    kc_tags: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    reference_solution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reference_ast: Mapped[dict | None] = mapped_column(JSONB, nullable=True) # cached AST of reference_solution
+

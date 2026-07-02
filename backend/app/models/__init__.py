@@ -12,6 +12,7 @@ from app.models.log import InteractionLog
 from app.models.problem import Problem
 from app.models.hint_quiz import HintQuizQuestion
 from app.models.quiz_progress import QuizProgress
+from app.models.feedback import Feedback
 
 __all__ = [
     "Base",
@@ -27,6 +28,7 @@ __all__ = [
     "InteractionLog",
     "Problem",
     "HintQuizQuestion",
-    "QuizProgress"
+    "QuizProgress",
+    "Feedback"
 ]
 

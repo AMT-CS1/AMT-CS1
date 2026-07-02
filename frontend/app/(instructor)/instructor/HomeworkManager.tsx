@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Calendar, HelpCircle, CheckCircle, AlertCircle, RefreshCw, Pencil, Trash2 } from 'lucide-react';
+import { BookOpen, Calendar, AlertCircle, CheckCircle, RefreshCw, Pencil, Trash2, Shuffle, Plus, X } from 'lucide-react';
+import { KcInfo, getKcDisplayName } from '@/lib/kc-utils';
 
 interface TestCase {
   input: string;
@@ -16,6 +17,7 @@ interface Problem {
   description_id: string;
   starter_code: string;
   test_cases: TestCase[];
+  kc_tags: string;
 }
 
 interface Homework {
@@ -26,53 +28,46 @@ interface Homework {
   target_task: string;
   source: string;
   deadline?: string;
+  randomize_problems: boolean;
 }
-
-const getKcDisplayName = (topic: string): string => {
-  if (!topic) return '';
-  return topic.split(',')
-    .map(s => {
-      const t = s.trim().toLowerCase();
-      if (t === 'co' || t.includes('circle') || t.includes('constant')) return 'Constant';
-      if (t === 'va' || t.includes('swap-variables') || t.includes('swapping') || t.includes('variable')) return 'Variable';
-      if (t === 'op' || t.includes('even-odd') || t.includes('even') || t.includes('operator')) return 'Operation';
-      if (t === 'ex' || t.includes('quadratic-eval') || t.includes('quadratic') || t.includes('expression')) return 'Expression';
-      if (t === 'io' || t.includes('greeting-gen') || t.includes('greeting') || t.includes('input') || t.includes('output')) return 'InputOutput';
-      if (t === 'cd' || t.includes('max-three') || t.includes('maximum') || t.includes('conditional')) return 'Conditional';
-      if (t === 'lo' || t.includes('factorial') || t.includes('loop')) return 'Loop';
-      return s.trim();
-    })
-    .join(', ');
-};
 
 export default function HomeworkManager() {
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
   const [problems, setProblems] = useState<Problem[]>([]);
+  const [kcList, setKcList] = useState<KcInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   // Form states
   const [week, setWeek] = useState<number>(1);
   const [courseRef, setCourseRef] = useState('CS1-PYTHON-2026');
-  const [selectedProblemKey, setSelectedProblemKey] = useState('');
-  const [topicKcFocus, setTopicKcFocus] = useState('');
+  const [selectedKcs, setSelectedKcs] = useState<string[]>([]);
   const [targetTask, setTargetTask] = useState('');
   const [deadline, setDeadline] = useState('');
+  const [randomizeProblems, setRandomizeProblems] = useState(false);
   
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  // Edit / Delete states
+  // Drawer and Delete states
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingHomework, setEditingHomework] = useState<Homework | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Count matching problems for selected KCs
+  const matchingProblemCount = problems.filter(p => {
+    const pKcs = p.kc_tags.split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+    return selectedKcs.some(sk => pKcs.includes(sk.toUpperCase()));
+  }).length;
 
   const fetchData = async () => {
     setLoading(true);
     setError('');
     try {
-      const [problemsRes, homeworksRes] = await Promise.all([
+      const [problemsRes, homeworksRes, kcsRes] = await Promise.all([
         fetch('/api/problems'),
-        fetch('/api/targets')
+        fetch('/api/targets'),
+        fetch('/api/kcs')
       ]);
 
       if (!problemsRes.ok || !homeworksRes.ok) {
@@ -81,17 +76,14 @@ export default function HomeworkManager() {
 
       const problemsData = await problemsRes.json();
       const homeworksData = await homeworksRes.json();
+      const kcsData = kcsRes.ok ? await kcsRes.json() : [];
 
       setProblems(problemsData);
+      setKcList(kcsData);
       
       // Sort homeworks by week ascending
       const sortedHomeworks = homeworksData.sort((a: Homework, b: Homework) => a.week - b.week);
       setHomeworks(sortedHomeworks);
-
-      // Pre-select first problem if available and not currently editing/selected
-      if (problemsData.length > 0 && !selectedProblemKey && !editingHomework) {
-        handleProblemSelect(problemsData[0].key, problemsData);
-      }
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'An error occurred while loading homework details.');
@@ -104,32 +96,30 @@ export default function HomeworkManager() {
     fetchData();
   }, []);
 
-  const handleProblemSelect = (key: string, currentProblems = problems) => {
-    setSelectedProblemKey(key);
-    const prob = currentProblems.find(p => p.key === key);
-    if (prob) {
-      setTopicKcFocus(prob.key);
-      setTargetTask(prob.description_en || prob.description_id);
-    }
+  const toggleKc = (kcId: string) => {
+    setSelectedKcs(prev =>
+      prev.includes(kcId)
+        ? prev.filter(k => k !== kcId)
+        : [...prev, kcId]
+    );
   };
 
   const handleStartEdit = (hw: Homework) => {
     setEditingHomework(hw);
     setWeek(hw.week);
     setCourseRef(hw.course_ref);
-    setSelectedProblemKey(hw.topic_kc_focus);
-    setTopicKcFocus(hw.topic_kc_focus);
+    setSelectedKcs(hw.topic_kc_focus.split(',').map(k => k.trim()).filter(Boolean));
     setTargetTask(hw.target_task);
+    setRandomizeProblems(hw.randomize_problems);
     if (hw.deadline) {
       try {
         const dateObj = new Date(hw.deadline);
         const year = dateObj.getFullYear();
         const month = String(dateObj.getMonth() + 1).padStart(2, '0');
         const day = String(dateObj.getDate()).padStart(2, '0');
-        const _day = String(dateObj.getDate()).padStart(2, '0');
         const hours = String(dateObj.getHours()).padStart(2, '0');
         const minutes = String(dateObj.getMinutes()).padStart(2, '0');
-        setDeadline(`${year}-${month}-${_day}T${hours}:${minutes}`);
+        setDeadline(`${year}-${month}-${day}T${hours}:${minutes}`);
       } catch (e) {
         console.error('Failed to parse deadline date', e);
         setDeadline('');
@@ -139,6 +129,7 @@ export default function HomeworkManager() {
     }
     setError('');
     setSubmitSuccess(false);
+    setIsDrawerOpen(true);
   };
 
   const handleCancelEdit = () => {
@@ -146,15 +137,12 @@ export default function HomeworkManager() {
     setWeek(1);
     setCourseRef('CS1-PYTHON-2026');
     setDeadline('');
-    if (problems.length > 0) {
-      handleProblemSelect(problems[0].key, problems);
-    } else {
-      setSelectedProblemKey('');
-      setTopicKcFocus('');
-      setTargetTask('');
-    }
+    setSelectedKcs([]);
+    setTargetTask('');
+    setRandomizeProblems(false);
     setError('');
     setSubmitSuccess(false);
+    setIsDrawerOpen(false);
   };
 
   const handleDelete = async (id: string) => {
@@ -181,11 +169,13 @@ export default function HomeworkManager() {
     setSubmitSuccess(false);
     setError('');
 
-    if (!courseRef || !week || !topicKcFocus || !targetTask) {
-      setError('All fields are required.');
+    if (!courseRef || !week || selectedKcs.length === 0 || !targetTask) {
+      setError('All fields are required. Please select at least one KC.');
       setSubmitting(false);
       return;
     }
+
+    const topicKcFocus = selectedKcs.join(',');
 
     try {
       const url = editingHomework ? `/api/targets?id=${editingHomework.id}` : '/api/targets';
@@ -202,7 +192,8 @@ export default function HomeworkManager() {
           topic_kc_focus: topicKcFocus,
           target_task: targetTask,
           source: 'manual',
-          deadline: deadline ? new Date(deadline).toISOString() : null
+          deadline: deadline ? new Date(deadline).toISOString() : null,
+          randomize_problems: randomizeProblems,
         }),
       });
 
@@ -212,35 +203,24 @@ export default function HomeworkManager() {
       }
 
       setSubmitSuccess(true);
-      if (editingHomework) {
-        setEditingHomework(null);
-      }
       
-      // Clear fields if creating
-      if (method === 'POST') {
-        setWeek(1);
-        setDeadline('');
-        if (problems.length > 0) {
-          handleProblemSelect(problems[0].key, problems);
-        }
-      }
+      // Brief success visual before closing drawer
+      setTimeout(() => {
+        handleCancelEdit();
+        fetchData();
+      }, 800);
       
-      // Refresh list
-      await fetchData();
-      
-      setTimeout(() => setSubmitSuccess(false), 5000);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'An error occurred while publishing the homework.');
-    } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mt-8">
-      {/* List of Configured Homeworks */}
-      <div className="lg:col-span-6 space-y-6">
+    <div className="relative">
+      {/* List of Configured Homeworks (Full-width) */}
+      <div className="space-y-6">
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between mb-5">
             <div>
@@ -265,20 +245,18 @@ export default function HomeworkManager() {
           ) : homeworks.length === 0 ? (
             <p className="text-xs text-slate-400 py-6 text-center font-medium">No homeworks currently assigned.</p>
           ) : (
-            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-1">
-              {homeworks.map((hw) => {
-                // Find matching problem details from loaded problems
-                const matchedProblem = problems.find(p => p.key.toLowerCase() === hw.topic_kc_focus.toLowerCase());
-                return (
-                  <div key={hw.id} className="p-4 rounded-xl border border-slate-100 hover:border-slate-200 bg-slate-50/30 transition-all space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {homeworks.map((hw) => (
+                <div key={hw.id} className="p-5 rounded-xl border border-slate-100 hover:border-slate-200 bg-slate-50/30 transition-all flex flex-col justify-between space-y-4">
+                  <div className="space-y-3">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center space-x-2">
-                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 border border-indigo-150 text-xs font-bold text-indigo-700">
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 border border-indigo-150 text-xs font-bold text-indigo-700 shrink-0">
                           W{hw.week}
                         </span>
                         <div>
                           <span className="font-extrabold text-sm text-slate-800">
-                            {matchedProblem ? matchedProblem.title : getKcDisplayName(hw.topic_kc_focus)}
+                            {getKcDisplayName(hw.topic_kc_focus, kcList) || hw.topic_kc_focus}
                           </span>
                           <span className="block text-[9px] text-slate-400 font-semibold uppercase mt-0.5 tracking-wider">
                             Course: {hw.course_ref}
@@ -296,10 +274,22 @@ export default function HomeworkManager() {
                               })}</span>
                             </div>
                           )}
+                          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                            {hw.randomize_problems && (
+                              <span className="inline-flex items-center gap-1 text-[9px] bg-violet-50 text-violet-700 border border-violet-100 px-1.5 py-0.5 rounded-full font-bold">
+                                <Shuffle className="h-2.5 w-2.5" /> Random
+                              </span>
+                            )}
+                            {hw.topic_kc_focus.split(',').map(kc => (
+                              <span key={kc.trim()} className="text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-100 px-1.5 py-0.5 rounded-full font-bold">
+                                {kc.trim()}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       </div>
                       
-                      <div className="flex flex-col items-end space-y-1.5">
+                      <div className="flex flex-col items-end space-y-1.5 shrink-0">
                         <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 rounded-full font-bold">
                           Published
                         </span>
@@ -331,7 +321,7 @@ export default function HomeworkManager() {
                             </button>
                             <button
                               onClick={() => setConfirmDeleteId(hw.id)}
-                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all"
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-55 rounded transition-all"
                               title="Delete Assignment"
                             >
                               <Trash2 className="h-3 w-3" />
@@ -341,29 +331,59 @@ export default function HomeworkManager() {
                       </div>
                     </div>
 
-                    <p className="text-xs text-slate-550 whitespace-pre-line border-t border-slate-100 pt-2 leading-relaxed">
+                    <p className="text-xs text-slate-550 whitespace-pre-line border-t border-slate-100 pt-2.5 leading-relaxed">
                       {hw.target_task}
                     </p>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           )}
         </div>
       </div>
 
-      {/* Homework Creation/Assignment Form */}
-      <div className="lg:col-span-6">
-        <form onSubmit={handleSubmit} className={`rounded-xl border ${editingHomework ? 'border-indigo-300 shadow-indigo-50/50 shadow-md' : 'border-slate-200 shadow-sm'} bg-white p-6 space-y-5 transition-all`}>
-          <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-indigo-600">
-              {editingHomework ? 'Edit Homework Assignment' : 'Publish & Tie Problem to Homework'}
-            </h2>
-            <p className="text-[10px] text-slate-450 mt-0.5 font-medium">
-              {editingHomework 
-                ? `Modifying assignment for Week ${editingHomework.week} of ${editingHomework.course_ref}` 
-                : 'Configure a weekly slot and assign a dynamic coding problem to it.'}
-            </p>
+      {/* Floating Action Button (FAB) at the bottom right */}
+      <button
+        type="button"
+        onClick={() => {
+          handleCancelEdit();
+          setIsDrawerOpen(true);
+        }}
+        className="fixed bottom-8 right-8 z-45 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl hover:scale-105 active:scale-95 transition-all"
+        title="Publish New Homework"
+      >
+        <Plus className="h-6 w-6" />
+      </button>
+
+      {/* Side Drawer Backdrop */}
+      {isDrawerOpen && (
+        <div 
+          onClick={handleCancelEdit}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 transition-opacity"
+        />
+      )}
+
+      {/* Side Drawer Panel (Slides from the right) */}
+      <div className={`fixed top-0 right-0 h-full w-full max-w-2xl bg-white shadow-2xl border-l border-slate-200 z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto ${isDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div>
+              <h2 className="text-base font-bold uppercase tracking-wider text-indigo-600">
+                {editingHomework ? 'Edit Homework Assignment' : 'Publish New Homework'}
+              </h2>
+              <p className="text-[10px] text-slate-450 mt-0.5 font-medium">
+                {editingHomework 
+                  ? `Modifying assignment for Week ${editingHomework.week} of ${editingHomework.course_ref}` 
+                  : 'Select KC focus areas. Students will be given 3 matching problems to solve.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-650 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
 
           {error && (
@@ -417,64 +437,80 @@ export default function HomeworkManager() {
             />
           </div>
 
+          {/* KC Focus Selection */}
           <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1.5">Select Coding Problem *</label>
-            {problems.length === 0 ? (
-              <p className="text-xs text-amber-600 font-medium">Please create a coding problem first in the form below.</p>
-            ) : (
-              <select
-                value={selectedProblemKey}
-                onChange={(e) => handleProblemSelect(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-hidden bg-white text-slate-800"
-                required
-              >
-                {problems.map((p) => (
-                  <option key={p.id} value={p.key}>
-                    {p.title} (key: {p.key})
-                  </option>
-                ))}
-              </select>
-            )}
+            <label className="block text-xs font-bold text-slate-600 mb-2">
+              KC Focus Areas * 
+              {selectedKcs.length > 0 && (
+                <span className="ml-2 text-[10px] text-indigo-600 font-semibold">
+                  ({matchingProblemCount} matching problem{matchingProblemCount !== 1 ? 's' : ''})
+                </span>
+              )}
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {kcList.map((kc) => {
+                const isSelected = selectedKcs.includes(kc.id);
+                return (
+                  <button
+                    key={kc.id}
+                    type="button"
+                    onClick={() => toggleKc(kc.id)}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-700'
+                    }`}
+                  >
+                    {kc.id} — {kc.name}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1.5">Homework Focus Topic (Auto-filled) *</label>
+          {/* Randomize Checkbox */}
+          <div className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 bg-slate-50/50">
             <input
-              type="text"
-              placeholder="e.g. Loops"
-              value={getKcDisplayName(topicKcFocus)}
-              onChange={(e) => setTopicKcFocus(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-hidden bg-slate-50 text-slate-600 cursor-not-allowed"
-              readOnly
-              required
+              type="checkbox"
+              id="randomize-problems"
+              checked={randomizeProblems}
+              onChange={(e) => setRandomizeProblems(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
             />
+            <label htmlFor="randomize-problems" className="cursor-pointer">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <Shuffle className="h-3.5 w-3.5 text-violet-500" />
+                Randomize Problems
+              </span>
+              <p className="text-[10px] text-slate-505 mt-0.5">
+                Each student receives a randomly-picked set of 3 problems from the matching KC pool.
+              </p>
+            </label>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1.5">Homework Instructions (Auto-filled) *</label>
+            <label className="block text-xs font-bold text-slate-600 mb-1.5">Homework Instructions *</label>
             <textarea
               placeholder="Detailed coding instructions for the student..."
               value={targetTask}
               onChange={(e) => setTargetTask(e.target.value)}
               rows={5}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-hidden bg-slate-50 text-slate-600"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-hidden"
               required
             />
           </div>
 
-          <div className="flex space-x-3">
-            {editingHomework && (
-              <button
-                type="button"
-                onClick={handleCancelEdit}
-                className="flex-1 rounded-xl border border-slate-200 hover:bg-slate-50 px-4 py-3 text-xs font-bold text-slate-600 transition-all"
-              >
-                Cancel Edit
-              </button>
-            )}
+          <div className="flex space-x-3 pt-4 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              className="flex-1 rounded-xl border border-slate-200 hover:bg-slate-50 px-4 py-3 text-xs font-bold text-slate-600 transition-all"
+            >
+              Cancel
+            </button>
             <button
               type="submit"
-              disabled={submitting || problems.length === 0}
+              disabled={submitting || selectedKcs.length === 0}
               className="flex-1 flex items-center justify-center space-x-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:brightness-105 hover:shadow-md px-4 py-3 text-xs font-bold text-white transition-all disabled:opacity-50"
             >
               {submitting ? (

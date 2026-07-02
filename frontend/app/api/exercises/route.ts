@@ -23,6 +23,28 @@ export async function POST(request: Request) {
       return NextResponse.json(data);
     }
 
+    // Check if this is a quiz feedback generation request
+    if (body._action === 'feedback') {
+      const { _action, ...payload } = body;
+      const data = await apiFetch('exercises/feedback', {
+        method: 'POST',
+        token,
+        body: JSON.stringify(payload),
+      });
+      return NextResponse.json(data);
+    }
+
+    // Check if this is a feedback rating request
+    if (body._action === 'rate') {
+      const { _action, feedback_id, rating } = body;
+      const data = await apiFetch(`exercises/feedback/${feedback_id}/rate`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ rating }),
+      });
+      return NextResponse.json(data);
+    }
+
     // Default: Call FastAPI backend POST /exercises/generate
     const data = await apiFetch('exercises/generate', {
       method: 'POST',

@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { decodeJwt } from '@/lib/auth';
 import SignOutButton from '@/components/SignOutButton';
-import { ClipboardCheck, BarChart3, Users, GraduationCap } from 'lucide-react';
+import { ClipboardCheck, BarChart3, Users, GraduationCap, Code, FileText } from 'lucide-react';
 import Link from 'next/link';
 
 export default async function InstructorLayout({
@@ -36,10 +36,24 @@ export default async function InstructorLayout({
           <nav className="space-y-1.5">
             <Link
               href="/instructor"
-              className="flex items-center space-x-3 rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 border border-indigo-100"
+              className="flex items-center space-x-3 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
             >
               <ClipboardCheck className="h-4.5 w-4.5" />
-              <span>Homework & Review</span>
+              <span>Homework</span>
+            </Link>
+            <Link
+              href="/instructor/problems"
+              className="flex items-center space-x-3 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+            >
+              <Code className="h-4.5 w-4.5" />
+              <span>Problems</span>
+            </Link>
+            <Link
+              href="/instructor/submissions"
+              className="flex items-center space-x-3 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+            >
+              <FileText className="h-4.5 w-4.5" />
+              <span>Submissions</span>
             </Link>
             <div
               className="flex items-center space-x-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-450 cursor-not-allowed select-none"
@@ -72,7 +86,7 @@ export default async function InstructorLayout({
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
         <header className="h-16 border-b border-slate-200 px-8 flex items-center justify-between bg-white shadow-xs">
-          <h2 className="text-lg font-bold text-slate-800 tracking-wide">Homework & Review Console</h2>
+          <h2 className="text-lg font-bold text-slate-800 tracking-wide">Instructor Console</h2>
           <div className="flex items-center space-x-4">
             <Link
               href="/status"

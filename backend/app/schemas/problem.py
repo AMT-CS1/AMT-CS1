@@ -13,6 +13,8 @@ class ProblemCreate(BaseModel):
     description_id: str
     starter_code: str
     test_cases: List[TestCaseSchema]
+    kc_tags: str = Field(default="", max_length=255)
+    reference_solution: str | None = None
 
 class ProblemResponse(BaseModel):
     id: uuid.UUID
@@ -22,6 +24,10 @@ class ProblemResponse(BaseModel):
     description_id: str
     starter_code: str
     test_cases: List[TestCaseSchema]
+    kc_tags: str
+    # Reference solution is only populated for instructors; the routers null
+    # it out for other roles so students never receive the answer.
+    reference_solution: str | None = None
 
     class Config:
         from_attributes = True

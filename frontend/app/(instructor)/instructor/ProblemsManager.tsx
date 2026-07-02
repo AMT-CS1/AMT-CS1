@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Code, BookOpen, CheckCircle, AlertCircle, RefreshCw, Pencil } from 'lucide-react';
+import { Plus, Trash2, Code, CheckCircle, AlertCircle, RefreshCw, Pencil, X } from 'lucide-react';
 import DapCodeEditor from '@/components/DapCodeEditor';
+import { KcInfo, getKcDisplayName } from '@/lib/kc-utils';
 
 interface TestCase {
   input: string;
@@ -17,10 +18,13 @@ interface Problem {
   description_id: string;
   starter_code: string;
   test_cases: TestCase[];
+  kc_tags: string;
+  reference_solution?: string | null;
 }
 
 export default function ProblemsManager() {
   const [problems, setProblems] = useState<Problem[]>([]);
+  const [kcList, setKcList] = useState<KcInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -30,24 +34,34 @@ export default function ProblemsManager() {
   const [descriptionEn, setDescriptionEn] = useState('');
   const [descriptionId, setDescriptionId] = useState('');
   const [starterCode, setStarterCode] = useState('');
+  const [referenceSolution, setReferenceSolution] = useState('');
   const [testCases, setTestCases] = useState<TestCase[]>([{ input: '', expected: '' }]);
+  const [selectedKcs, setSelectedKcs] = useState<string[]>([]);
   
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  // Edit / Delete states
+  // Drawer and Delete states
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingProblem, setEditingProblem] = useState<Problem | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  const fetchProblems = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/problems');
-      if (!res.ok) {
-        throw new Error(`Failed to fetch problems: ${res.status}`);
+      const [problemsRes, kcsRes] = await Promise.all([
+        fetch('/api/problems'),
+        fetch('/api/kcs')
+      ]);
+
+      if (!problemsRes.ok) {
+        throw new Error(`Failed to fetch problems: ${problemsRes.status}`);
       }
-      const data = await res.json();
+      const data = await problemsRes.json();
+      const kcsData = kcsRes.ok ? await kcsRes.json() : [];
+
       setProblems(data);
+      setKcList(kcsData);
       setError('');
     } catch (err: any) {
       console.error(err);
@@ -58,7 +72,7 @@ export default function ProblemsManager() {
   };
 
   useEffect(() => {
-    fetchProblems();
+    fetchData();
   }, []);
 
   const handleAddTestCase = () => {
@@ -76,6 +90,14 @@ export default function ProblemsManager() {
     setTestCases(updated);
   };
 
+  const toggleKc = (kcId: string) => {
+    setSelectedKcs(prev =>
+      prev.includes(kcId)
+        ? prev.filter(k => k !== kcId)
+        : [...prev, kcId]
+    );
+  };
+
   const handleStartEdit = (prob: Problem) => {
     setEditingProblem(prob);
     setKey(prob.key);
@@ -83,9 +105,12 @@ export default function ProblemsManager() {
     setDescriptionEn(prob.description_en);
     setDescriptionId(prob.description_id);
     setStarterCode(prob.starter_code);
+    setReferenceSolution(prob.reference_solution || '');
     setTestCases(prob.test_cases.length > 0 ? prob.test_cases : [{ input: '', expected: '' }]);
+    setSelectedKcs(prob.kc_tags ? prob.kc_tags.split(',').map(k => k.trim()).filter(Boolean) : []);
     setError('');
     setSubmitSuccess(false);
+    setIsDrawerOpen(true);
   };
 
   const handleCancelEdit = () => {
@@ -95,9 +120,12 @@ export default function ProblemsManager() {
     setDescriptionEn('');
     setDescriptionId('');
     setStarterCode('');
+    setReferenceSolution('');
     setTestCases([{ input: '', expected: '' }]);
+    setSelectedKcs([]);
     setError('');
     setSubmitSuccess(false);
+    setIsDrawerOpen(false);
   };
 
   const handleDelete = async (id: string) => {
@@ -111,7 +139,7 @@ export default function ProblemsManager() {
         throw new Error(data.error || 'Failed to delete problem.');
       }
       setConfirmDeleteId(null);
-      await fetchProblems();
+      await fetchData();
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'An error occurred while deleting the problem.');
@@ -138,6 +166,8 @@ export default function ProblemsManager() {
       return;
     }
 
+    const kc_tags = selectedKcs.join(',');
+
     try {
       const url = editingProblem ? `/api/problems?id=${editingProblem.id}` : '/api/problems';
       const method = editingProblem ? 'PUT' : 'POST';
@@ -154,6 +184,8 @@ export default function ProblemsManager() {
           description_id: descriptionId,
           starter_code: starterCode,
           test_cases: testCases,
+          kc_tags,
+          reference_solution: referenceSolution.trim() ? referenceSolution : null,
         }),
       });
 
@@ -163,34 +195,24 @@ export default function ProblemsManager() {
       }
 
       setSubmitSuccess(true);
-      if (editingProblem) {
-        setEditingProblem(null);
-      }
       
-      // Reset form fields
-      setKey('');
-      setTitle('');
-      setDescriptionEn('');
-      setDescriptionId('');
-      setStarterCode('');
-      setTestCases([{ input: '', expected: '' }]);
+      // Keep drawer open for a brief success visual, then close or clear
+      setTimeout(() => {
+        handleCancelEdit();
+        fetchData();
+      }, 800);
       
-      // Refresh list
-      await fetchProblems();
-      
-      setTimeout(() => setSubmitSuccess(false), 5000);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'An error occurred while saving the problem.');
-    } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mt-8">
-      {/* List of Existing Problems */}
-      <div className="lg:col-span-6 space-y-6">
+    <div className="relative">
+      {/* List of Existing Problems (Full-width) */}
+      <div className="space-y-6">
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between mb-5">
             <div>
@@ -200,7 +222,7 @@ export default function ProblemsManager() {
               <p className="text-[10px] text-slate-405 mt-0.5">Problems currently in PostgreSQL</p>
             </div>
             <button 
-              onClick={fetchProblems}
+              onClick={fetchData}
               className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
               title="Refresh"
             >
@@ -215,75 +237,90 @@ export default function ProblemsManager() {
           ) : problems.length === 0 ? (
             <p className="text-xs text-slate-400 py-6 text-center">No coding problems found in database.</p>
           ) : (
-            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {problems.map((prob) => (
-                <div key={prob.id} className="p-4 rounded-xl border border-slate-100 hover:border-slate-200 bg-slate-50/30 transition-all space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="font-extrabold text-sm text-slate-800">{prob.title}</span>
-                      <code className="block text-[10px] font-mono text-indigo-650 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100/50 mt-1 max-w-max">
-                        key: {prob.key}
-                      </code>
-                    </div>
-                    
-                    <div className="flex flex-col items-end space-y-1.5">
-                      <span className="text-[10px] bg-slate-150 text-slate-650 px-2 py-0.5 rounded-full font-bold">
-                        {prob.test_cases.length} Test Cases
-                      </span>
+                <div key={prob.id} className="p-5 rounded-xl border border-slate-100 hover:border-slate-200 bg-slate-50/30 transition-all flex flex-col justify-between space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <span className="font-extrabold text-sm text-slate-800">{prob.title}</span>
+                        <code className="block text-[10px] font-mono text-indigo-650 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100/50 mt-1 max-w-max">
+                          key: {prob.key}
+                        </code>
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {prob.kc_tags ? (
+                            prob.kc_tags.split(',').map((tag) => (
+                              <span key={tag.trim()} className="text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-100 px-1.5 py-0.5 rounded-full font-bold">
+                                {tag.trim()}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full font-semibold">
+                              No KC Tags
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-col items-end space-y-1.5">
+                        <span className="text-[10px] bg-slate-150 text-slate-650 px-2 py-0.5 rounded-full font-bold">
+                          {prob.test_cases.length} Test Cases
+                        </span>
 
-                      {confirmDeleteId === prob.id ? (
-                        <div className="flex items-center space-x-1 mt-1">
-                          <span className="text-[9px] text-rose-600 font-bold mr-1">Delete?</span>
-                          <button
-                            onClick={() => handleDelete(prob.id)}
-                            className="px-1.5 py-0.5 bg-rose-600 text-white rounded text-[9px] font-bold hover:bg-rose-700 transition-colors"
-                          >
-                            Yes
-                          </button>
-                          <button
-                            onClick={() => setConfirmDeleteId(null)}
-                            className="px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded text-[9px] font-bold hover:bg-slate-350 transition-colors"
-                          >
-                            No
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center space-x-1.5">
-                          <button
-                            onClick={() => handleStartEdit(prob)}
-                            className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded transition-all"
-                            title="Edit Problem"
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </button>
-                          <button
-                            onClick={() => setConfirmDeleteId(prob.id)}
-                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-55 rounded transition-all"
-                            title="Delete Problem"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </div>
-                      )}
+                        {confirmDeleteId === prob.id ? (
+                          <div className="flex items-center space-x-1 mt-1">
+                            <span className="text-[9px] text-rose-600 font-bold mr-1">Delete?</span>
+                            <button
+                              onClick={() => handleDelete(prob.id)}
+                              className="px-1.5 py-0.5 bg-rose-600 text-white rounded text-[9px] font-bold hover:bg-rose-700 transition-colors"
+                            >
+                              Yes
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded text-[9px] font-bold hover:bg-slate-350 transition-colors"
+                            >
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-1.5">
+                            <button
+                              onClick={() => handleStartEdit(prob)}
+                              className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded transition-all"
+                              title="Edit Problem"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteId(prob.id)}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-55 rounded transition-all"
+                              title="Delete Problem"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-100 pt-2 space-y-2">
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">English Description</span>
+                        <p className="text-xs text-slate-550 line-clamp-2 whitespace-pre-line leading-relaxed">
+                          {prob.description_en}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Indonesian Description</span>
+                        <p className="text-xs text-slate-550 line-clamp-2 whitespace-pre-line leading-relaxed">
+                          {prob.description_id}
+                        </p>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="border-t border-slate-100 pt-2 space-y-2">
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">English Description</span>
-                      <p className="text-xs text-slate-550 line-clamp-3 whitespace-pre-line leading-relaxed">
-                        {prob.description_en}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Indonesian Description</span>
-                      <p className="text-xs text-slate-550 line-clamp-3 whitespace-pre-line leading-relaxed">
-                        {prob.description_id}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-900 p-2.5 rounded-lg font-mono text-[10px] text-emerald-400 overflow-x-auto max-h-32">
+                  <div className="bg-slate-900 p-2.5 rounded-lg font-mono text-[10px] text-emerald-400 overflow-x-auto max-h-24">
                     <pre>{prob.starter_code}</pre>
                   </div>
                 </div>
@@ -293,16 +330,46 @@ export default function ProblemsManager() {
         </div>
       </div>
 
-      {/* Add/Edit Problem Form */}
-      <div className="lg:col-span-6">
-        <form onSubmit={handleSubmit} className={`rounded-xl border ${editingProblem ? 'border-indigo-300 shadow-indigo-50/50 shadow-md' : 'border-slate-200 shadow-sm'} bg-white p-6 space-y-5 transition-all`}>
-          <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-indigo-600">
-              {editingProblem ? 'Edit Coding Exercise' : 'Create New coding exercise'}
-            </h2>
-            <p className="text-[10px] text-slate-405 mt-0.5">
-              {editingProblem ? `Modifying exercise key: ${editingProblem.key}` : 'Add a dynamic problem instance with starter code and test cases.'}
-            </p>
+      {/* Floating Action Button (FAB) in the bottom right */}
+      <button
+        type="button"
+        onClick={() => {
+          handleCancelEdit();
+          setIsDrawerOpen(true);
+        }}
+        className="fixed bottom-8 right-8 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl hover:scale-105 active:scale-95 transition-all"
+        title="Create New Problem"
+      >
+        <Plus className="h-6 w-6" />
+      </button>
+
+      {/* Side Drawer Backdrop */}
+      {isDrawerOpen && (
+        <div 
+          onClick={handleCancelEdit}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 transition-opacity"
+        />
+      )}
+
+      {/* Side Drawer Panel (Slides from the right) */}
+      <div className={`fixed top-0 right-0 h-full w-full max-w-2xl bg-white shadow-2xl border-l border-slate-200 z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto ${isDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div>
+              <h2 className="text-base font-bold uppercase tracking-wider text-indigo-600">
+                {editingProblem ? 'Edit Coding Exercise' : 'Create New coding exercise'}
+              </h2>
+              <p className="text-[10px] text-slate-405 mt-0.5">
+                {editingProblem ? `Modifying exercise key: ${editingProblem.key}` : 'Add a dynamic problem instance with starter code and test cases.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-650 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
 
           {error && (
@@ -344,6 +411,30 @@ export default function ProblemsManager() {
             </div>
           </div>
 
+          {/* KC Tags Selector */}
+          <div>
+            <label className="block text-xs font-bold text-slate-600 mb-2">KC Tags (Select all that apply) *</label>
+            <div className="flex flex-wrap gap-2">
+              {kcList.map((kc) => {
+                const isSelected = selectedKcs.includes(kc.id);
+                return (
+                  <button
+                    key={kc.id}
+                    type="button"
+                    onClick={() => toggleKc(kc.id)}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-700'
+                    }`}
+                  >
+                    {kc.id} — {kc.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-600 mb-1.5">Problem Description (English) *</label>
@@ -378,6 +469,18 @@ export default function ProblemsManager() {
             />
           </div>
 
+          <div>
+            <label className="block text-xs font-bold text-slate-600 mb-1.5">Reference Solution (.dap)</label>
+            <p className="text-[10px] text-slate-400 mb-1.5">
+              Optional. Correct solution used to detect misconceptions in failed submissions. Never shown to students.
+            </p>
+            <DapCodeEditor
+              value={referenceSolution}
+              onChange={setReferenceSolution}
+              rows={8}
+            />
+          </div>
+
           {/* Test cases section */}
           <div className="space-y-3">
             <div className="flex items-center justify-between border-t border-slate-100 pt-3">
@@ -392,7 +495,7 @@ export default function ProblemsManager() {
               </button>
             </div>
 
-            <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
               {testCases.map((tc, index) => (
                 <div key={index} className="flex items-start space-x-3 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                   <span className="text-[10px] font-bold text-slate-400 w-5 pt-1.5">#{index + 1}</span>
@@ -439,16 +542,14 @@ export default function ProblemsManager() {
             </div>
           </div>
 
-          <div className="flex space-x-3">
-            {editingProblem && (
-              <button
-                type="button"
-                onClick={handleCancelEdit}
-                className="flex-1 rounded-xl border border-slate-200 hover:bg-slate-50 px-4 py-3 text-xs font-bold text-slate-600 transition-all"
-              >
-                Cancel Edit
-              </button>
-            )}
+          <div className="flex space-x-3 pt-4 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              className="flex-1 rounded-xl border border-slate-200 hover:bg-slate-50 px-4 py-3 text-xs font-bold text-slate-600 transition-all"
+            >
+              Cancel
+            </button>
             <button
               type="submit"
               disabled={submitting}

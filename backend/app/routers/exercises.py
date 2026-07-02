@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
 import uuid
-import json
 import logging
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,16 +7,19 @@ from sqlalchemy import select, and_
 from app.models.state import StudentModelState
 from app.models.hint_quiz import HintQuizQuestion
 from app.models.quiz_progress import QuizProgress
+from app.models.feedback import Feedback
+from app.models.log import InteractionLog
 from app.schemas.internal import ProblemRequestPayload
 from app.routers.internal import mock_problem_request
 from app.core.security import RoleChecker
 from app.core.database import get_db
 from app.schemas.exercise import (
     ExerciseRequest, ExerciseResponse, 
-    GenerateExercisesRequest, GenerateExercisesResponse, QuizQuestionSchema
+    GenerateExercisesRequest, GenerateExercisesResponse, QuizQuestionSchema,
+    QuizFeedbackRequest, QuizFeedbackResponse, QuizFeedbackRatingRequest
 )
 from app.schemas.quiz_progress import QuizCompleteRequest, QuizProgressResponse
-from app.core.llm import get_llm_provider, generate_intermediate_exercises
+from app.core.llm import get_llm_provider
 
 logger = logging.getLogger("app.exercises")
 
@@ -27,99 +29,162 @@ STATIC_FALLBACK_QUIZZES = {
   'swap-variables': [
     {
       "type": "mc",
-      "text": "If x <- 5 and y <- 10 initially, what are the values of x and y after running the following pseudocode?",
+      "text_en": "If x <- 5 and y <- 10 initially, what are the values of x and y after running the following pseudocode?",
+      "text_id": "Jika awalnya x <- 5 dan y <- 10, berapakah nilai x dan y setelah menjalankan pseudocode berikut?",
       "code": "temp <- x\nx <- y\ny <- temp",
-      "options": [
+      "options_en": [
+        "x = 5, y = 10",
+        "x = 10, y = 5",
+        "x = 5, y = 5",
+        "x = 10, y = 10"
+      ],
+      "options_id": [
         "x = 5, y = 10",
         "x = 10, y = 5",
         "x = 5, y = 5",
         "x = 10, y = 10"
       ],
       "answer": "B",
-      "explanation": "A temp variable stores the initial value of x (5), then x takes y's value (10), and y takes temp's stored value (5). This swaps the two variables."
+      "explanation_en": "A temp variable stores the initial value of x (5), then x takes y's value (10), and y takes temp's stored value (5). This swaps the two variables.",
+      "explanation_id": "Variabel temp menyimpan nilai awal dari x (5), kemudian x mengambil nilai y (10), dan y mengambil nilai temp yang tersimpan (5). Ini menukar nilai kedua variabel."
     },
     {
       "type": "sa",
-      "text": "In DAP pseudocode, which character operator sequence is used to perform variable assignment (e.g., storing a value)?",
+      "text_en": "In DAP pseudocode, which character operator sequence is used to perform variable assignment (e.g., storing a value)?",
+      "text_id": "Dalam pseudocode DAP, urutan karakter operator mana yang digunakan untuk melakukan penugasan variabel (misalnya, menyimpan nilai)?",
+      "code": None,
+      "options_en": None,
+      "options_id": None,
       "answer": "<-",
-      "explanation": "The arrow operator <- is used in DAP to assign values to variables."
+      "explanation_en": "The arrow operator <- is used in DAP to assign values to variables.",
+      "explanation_id": "Operator panah <- digunakan dalam DAP untuk menetapkan nilai ke variabel."
     },
     {
       "type": "mc",
-      "text": "Why do we need a temporary helper variable (temp) to swap the values of two variables x and y?",
-      "options": [
+      "text_en": "Why do we need a temporary helper variable (temp) to swap the values of two variables x and y?",
+      "text_id": "Mengapa kita memerlukan variabel pembantu sementara (temp) untuk menukar nilai dari dua variabel x dan y?",
+      "options_en": [
         "To prevent losing the original value of x when we overwrite it with y.",
         "Because DAP pseudocode compiler requires at least 3 variables to run.",
         "To speed up the compilation and program execution time.",
         "To declare the temp variable as a global buffer."
       ],
+      "options_id": [
+        "Untuk mencegah hilangnya nilai asli x ketika kita menimpanya dengan y.",
+        "Karena compiler pseudocode DAP membutuhkan setidaknya 3 variabel untuk dijalankan.",
+        "Untuk mempercepat waktu kompilasi dan eksekusi program.",
+        "Untuk mendeklarasikan variabel temp sebagai buffer global."
+      ],
       "answer": "A",
-      "explanation": "If we assign x <- y directly without saving x's original value, we overwrite x and lose its value forever, preventing us from assigning it to y."
+      "explanation_en": "If we assign x <- y directly without saving x's original value, we overwrite x and lose its value forever, preventing us from assigning it to y.",
+      "explanation_id": "Jika kita menetapkan x <- y secara langsung tanpa menyimpan nilai asli x, kita menimpa x dan kehilangan nilainya selamanya, mencegah kita menetapkannya ke y."
     }
   ],
   'factorial': [
     {
       "type": "mc",
-      "text": "What will be the final value of fact if we execute the loop with input n = 4?",
+      "text_en": "What will be the final value of fact if we execute the loop with input n = 4?",
+      "text_id": "Berapakah nilai akhir dari fact jika kita mengeksekusi loop dengan input n = 4?",
       "code": "fact <- 1\ni <- 1\nwhile i <= n do\n    fact <- fact * i\n    i <- i + 1\nendwhile",
-      "options": [
+      "options_en": [
+        "24",
+        "12",
+        "6",
+        "1"
+      ],
+      "options_id": [
         "24",
         "12",
         "6",
         "1"
       ],
       "answer": "A",
-      "explanation": "For n = 4, the loop multiplies fact by 1, 2, 3, and 4 sequentially: 1 * 1 * 2 * 3 * 4 = 24."
+      "explanation_en": "For n = 4, the loop multiplies fact by 1, 2, 3, and 4 sequentially: 1 * 1 * 2 * 3 * 4 = 24.",
+      "explanation_id": "Untuk n = 4, loop mengalikan fact dengan 1, 2, 3, dan 4 secara berurutan: 1 * 1 * 2 * 3 * 4 = 24."
     },
     {
       "type": "sa",
-      "text": "In the factorial algorithm, what is the initial value of the accumulator variable 'fact'?",
+      "text_en": "In the factorial algorithm, what is the initial value of the accumulator variable 'fact'?",
+      "text_id": "Dalam algoritma faktorial, berapakah nilai awal dari variabel akumulator 'fact'?",
+      "code": None,
+      "options_en": None,
+      "options_id": None,
       "answer": "1",
-      "explanation": "The variable 'fact' is initialized to 1 because 1 is the multiplicative identity. Initializing to 0 would cause all subsequent multiplications to result in 0."
+      "explanation_en": "The variable 'fact' is initialized to 1 because 1 is the multiplicative identity. Initializing to 0 would cause all subsequent multiplications to result in 0.",
+      "explanation_id": "Variabel 'fact' diinisialisasi ke 1 karena 1 adalah identitas perkalian. Menginisialisasi ke 0 akan menyebabkan semua perkalian berikutnya menghasilkan 0."
     },
     {
       "type": "mc",
-      "text": "What type of loop is used in the provided factorial algorithm?",
-      "options": [
+      "text_en": "What type of loop is used in the provided factorial algorithm?",
+      "text_id": "Jenis loop apa yang digunakan dalam algoritma faktorial yang disediakan?",
+      "options_en": [
+        "while loop",
+        "for loop",
+        "repeat-until loop",
+        "infinite loop"
+      ],
+      "options_id": [
         "while loop",
         "for loop",
         "repeat-until loop",
         "infinite loop"
       ],
       "answer": "A",
-      "explanation": "The algorithm uses a 'while' loop block structure: 'while i <= n do ... endwhile'."
+      "explanation_en": "The algorithm uses a 'while' loop block structure: 'while i <= n do ... endwhile'.",
+      "explanation_id": "Algoritma menggunakan struktur blok 'while' loop: 'while i <= n do ... endwhile'."
     }
   ],
   'generic': [
     {
       "type": "mc",
-      "text": "Which of the following is a key element of structured programming used to repeat a block of code?",
-      "options": [
+      "text_en": "Which of the following is a key element of structured programming used to repeat a block of code?",
+      "text_id": "Manakah dari berikut ini yang merupakan elemen kunci dari pemrograman terstruktur yang digunakan untuk mengulang blok kode?",
+      "options_en": [
         "Iteration (loops)",
         "Selection (if-else)",
         "Sequence",
         "Variables"
       ],
+      "options_id": [
+        "Iterasi (loops)",
+        "Seleksi (if-else)",
+        "Sekuensial",
+        "Variabel"
+      ],
       "answer": "A",
-      "explanation": "Iteration (loops) are used to repeat execution of a block of code."
+      "explanation_en": "Iteration (loops) are used to repeat execution of a block of code.",
+      "explanation_id": "Iterasi (loops) digunakan untuk mengulang eksekusi blok kode."
     },
     {
       "type": "sa",
-      "text": "What is the name of the section in a DAP program where variables are declared?",
+      "text_en": "What is the name of the section in a DAP program where variables are declared?",
+      "text_id": "Apakah nama bagian dalam program DAP tempat variabel dideklarasikan?",
+      "code": None,
+      "options_en": None,
+      "options_id": None,
       "answer": "dictionary",
-      "explanation": "Variables in a DAP program must be declared inside the 'dictionary' block."
+      "explanation_en": "Variables in a DAP program must be declared inside the 'dictionary' block.",
+      "explanation_id": "Variabel dalam program DAP harus dideklarasikan di dalam blok 'dictionary'."
     },
     {
       "type": "mc",
-      "text": "What does a syntax error mean in programming?",
-      "options": [
+      "text_en": "What does a syntax error mean in programming?",
+      "text_id": "Apakah arti dari syntax error dalam pemrograman?",
+      "options_en": [
         "The code violates the grammar rules of the programming language.",
         "The code runs but produces the wrong output.",
         "The program runs too slowly.",
         "The database connection failed."
       ],
+      "options_id": [
+        "Kode melanggar aturan tata bahasa (grammar) dari bahasa pemrograman.",
+        "Kode berjalan tetapi menghasilkan output yang salah.",
+        "Program berjalan terlalu lambat.",
+        "Koneksi database gagal."
+      ],
       "answer": "A",
-      "explanation": "A syntax error occurs when the code does not conform to the spelling and grammar rules of the programming language, preventing it from compiling."
+      "explanation_en": "A syntax error occurs when the code does not conform to the spelling and grammar rules of the programming language, preventing it from compiling.",
+      "explanation_id": "Syntax error terjadi ketika kode tidak sesuai dengan ejaan dan aturan tata bahasa dari bahasa pemrograman, mencegahnya untuk dikompilasi."
     }
   ]
 }
@@ -130,7 +195,6 @@ async def request_intermediate_exercise(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(RoleChecker(["student"]))
 ):
-    # Get student model state
     stmt = select(StudentModelState).where(
         StudentModelState.user_id == uuid.UUID(current_user["id"])
     ).order_by(StudentModelState.updated_at.desc())
@@ -138,7 +202,6 @@ async def request_intermediate_exercise(
     latest_state = state_res.scalars().first()
     state_id = latest_state.id if latest_state else None
 
-    # Call mock problem-request endpoint
     payload = ProblemRequestPayload(
         learner_state_ref=state_id,
         kc_focus=exercise_req.kc_focus,
@@ -165,13 +228,8 @@ async def generate_exercises(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(RoleChecker(["student"]))
 ):
-    """
-    Generates exactly 3 Intermediate Exercises (IE) using the configured LLM API.
-    Checks the database first; if not present, generates and saves them.
-    """
     problem_key = req.problem_key or "generic"
     
-    # Ensure QuizProgress is initialized for this student and problem key (marks starting the quiz)
     user_id = uuid.UUID(current_user["id"])
     progress_stmt = select(QuizProgress).where(
         and_(QuizProgress.user_id == user_id, QuizProgress.problem_key == problem_key)
@@ -198,11 +256,14 @@ async def generate_exercises(
         questions = [
             QuizQuestionSchema(
                 type=q.type,
-                text=q.text,
+                text_en=q.text_en or q.text or "",
+                text_id=q.text_id or q.text or "",
                 code=q.code,
-                options=q.options,
+                options_en=q.options_en or q.options or [],
+                options_id=q.options_id or q.options or [],
                 answer=q.answer,
-                explanation=q.explanation
+                explanation_en=q.explanation_en or q.explanation or "",
+                explanation_id=q.explanation_id or q.explanation or ""
             ) for q in db_questions
         ]
         return GenerateExercisesResponse(questions=questions[:3])
@@ -219,36 +280,43 @@ async def generate_exercises(
     fallback_questions = STATIC_FALLBACK_QUIZZES.get(task_ref, STATIC_FALLBACK_QUIZZES["generic"])
 
     llm = get_llm_provider()
-    # Check if we should use the LLM provider
     if llm.__class__.__name__ == "DummyLLMProvider":
         logger.info("Using static exercises fallback (DummyLLMProvider configured)")
-        # Cache fallback in DB
         fallback_schemas = []
         for item in fallback_questions:
             q_schema = QuizQuestionSchema(
                 type=item.get("type", "mc"),
-                text=item.get("text", ""),
+                text_en=item.get("text_en", ""),
+                text_id=item.get("text_id", ""),
                 code=item.get("code"),
-                options=item.get("options"),
+                options_en=item.get("options_en"),
+                options_id=item.get("options_id"),
                 answer=str(item.get("answer", "")),
-                explanation=item.get("explanation", "")
+                explanation_en=item.get("explanation_en", ""),
+                explanation_id=item.get("explanation_id", "")
             )
             fallback_schemas.append(q_schema)
             db_q = HintQuizQuestion(
                 problem_key=problem_key,
                 type=q_schema.type,
-                text=q_schema.text,
+                text=q_schema.text_en,
                 code=q_schema.code,
-                options=q_schema.options,
+                options=q_schema.options_en,
                 answer=q_schema.answer,
-                explanation=q_schema.explanation
+                explanation=q_schema.explanation_en,
+                text_en=q_schema.text_en,
+                text_id=q_schema.text_id,
+                options_en=q_schema.options_en,
+                options_id=q_schema.options_id,
+                explanation_en=q_schema.explanation_en,
+                explanation_id=q_schema.explanation_id
             )
             db.add(db_q)
         await db.commit()
         return GenerateExercisesResponse(questions=fallback_schemas)
 
     try:
-        data = await generate_intermediate_exercises(
+        data = await llm.generate_misconception_probe(
             kc_focus=req.kc_focus,
             problem_title=req.problem_title,
             problem_description=req.problem_description,
@@ -260,11 +328,14 @@ async def generate_exercises(
             questions.append(
                 QuizQuestionSchema(
                     type=item.get("type", "mc"),
-                    text=item.get("text", ""),
+                    text_en=item.get("text_en", ""),
+                    text_id=item.get("text_id", ""),
                     code=item.get("code"),
-                    options=item.get("options"),
+                    options_en=item.get("options_en"),
+                    options_id=item.get("options_id"),
                     answer=str(item.get("answer", "")),
-                    explanation=item.get("explanation", "")
+                    explanation_en=item.get("explanation_en", ""),
+                    explanation_id=item.get("explanation_id", "")
                 )
             )
 
@@ -273,11 +344,17 @@ async def generate_exercises(
             db_q = HintQuizQuestion(
                 problem_key=problem_key,
                 type=q.type,
-                text=q.text,
+                text=q.text_en,
                 code=q.code,
-                options=q.options,
+                options=q.options_en,
                 answer=q.answer,
-                explanation=q.explanation
+                explanation=q.explanation_en,
+                text_en=q.text_en,
+                text_id=q.text_id,
+                options_en=q.options_en,
+                options_id=q.options_id,
+                explanation_en=q.explanation_en,
+                explanation_id=q.explanation_id
             )
             db.add(db_q)
         await db.commit()
@@ -286,32 +363,39 @@ async def generate_exercises(
     except Exception as e:
         logger.warning(f"Failed to generate exercises via LLM: {e}. Falling back to pre-defined static questions.")
         
-        # Save fallback to DB so we don't have to keep falling back/trying LLM again
         fallback_schemas = []
         for item in fallback_questions:
             q_schema = QuizQuestionSchema(
                 type=item.get("type", "mc"),
-                text=item.get("text", ""),
+                text_en=item.get("text_en", ""),
+                text_id=item.get("text_id", ""),
                 code=item.get("code"),
-                options=item.get("options"),
+                options_en=item.get("options_en"),
+                options_id=item.get("options_id"),
                 answer=str(item.get("answer", "")),
-                explanation=item.get("explanation", "")
+                explanation_en=item.get("explanation_en", ""),
+                explanation_id=item.get("explanation_id", "")
             )
             fallback_schemas.append(q_schema)
             
             db_q = HintQuizQuestion(
                 problem_key=problem_key,
                 type=q_schema.type,
-                text=q_schema.text,
+                text=q_schema.text_en,
                 code=q_schema.code,
-                options=q_schema.options,
+                options=q_schema.options_en,
                 answer=q_schema.answer,
-                explanation=q_schema.explanation
+                explanation=q_schema.explanation_en,
+                text_en=q_schema.text_en,
+                text_id=q_schema.text_id,
+                options_en=q_schema.options_en,
+                options_id=q_schema.options_id,
+                explanation_en=q_schema.explanation_en,
+                explanation_id=q_schema.explanation_id
             )
             db.add(db_q)
         await db.commit()
         return GenerateExercisesResponse(questions=fallback_schemas)
-
 
 @router.get("/status/{problem_key}", response_model=QuizProgressResponse)
 async def get_quiz_status(
@@ -319,7 +403,6 @@ async def get_quiz_status(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(RoleChecker(["student"]))
 ):
-    """Check whether the current student has completed the IE quiz for a given problem key."""
     user_id = uuid.UUID(current_user["id"])
     stmt = select(QuizProgress).where(
         and_(QuizProgress.user_id == user_id, QuizProgress.problem_key == problem_key)
@@ -342,14 +425,12 @@ async def get_quiz_status(
         questions_answered=0
     )
 
-
 @router.post("/complete", response_model=QuizProgressResponse)
 async def complete_quiz(
     req: QuizCompleteRequest,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(RoleChecker(["student"]))
 ):
-    """Mark the IE quiz as completed for the current student and problem key."""
     user_id = uuid.UUID(current_user["id"])
 
     if req.questions_answered < 3:
@@ -383,3 +464,81 @@ async def complete_quiz(
         questions_answered=progress.questions_answered,
         completed_at=progress.completed_at
     )
+
+
+@router.post("/feedback", response_model=QuizFeedbackResponse, status_code=201)
+async def save_quiz_feedback(
+    payload: QuizFeedbackRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["student"]))
+):
+    """
+    Saves the pre-generated Socratic feedback (created during hint-quiz
+    generation) when a student answers a question incorrectly, so it can be
+    rated and analyzed. No extra LLM call happens here.
+    """
+    user_id = uuid.UUID(current_user["id"])
+    feedback_text = payload.feedback_text
+
+    # Store feedback in the feedbacks table
+    db_feedback = Feedback(
+        user_id=user_id,
+        problem_key=payload.problem_key,
+        question_text=payload.question_text,
+        student_answer=payload.student_answer,
+        feedback_text=feedback_text
+    )
+    db.add(db_feedback)
+    await db.flush()  # assign the feedback id before referencing it in the log
+
+    # Record the event in interaction_logs, referencing the generated feedback
+    db_log = InteractionLog(
+        actor=str(user_id),
+        event_type="feedback",
+        payload={
+            "feedback_id": str(db_feedback.id),
+            "problem_key": payload.problem_key,
+            "question_text": payload.question_text,
+            "student_answer": payload.student_answer,
+            "lang": payload.lang or "en",
+        }
+    )
+    db.add(db_log)
+
+    await db.commit()
+    await db.refresh(db_feedback)
+    
+    return QuizFeedbackResponse(
+        id=db_feedback.id,
+        feedback_text=db_feedback.feedback_text
+    )
+
+
+@router.post("/feedback/{feedback_id}/rate")
+async def rate_quiz_feedback(
+    feedback_id: uuid.UUID,
+    rate_payload: QuizFeedbackRatingRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["student"]))
+):
+    user_id = uuid.UUID(current_user["id"])
+    
+    stmt = select(Feedback).where(Feedback.id == feedback_id)
+    res = await db.execute(stmt)
+    db_feedback = res.scalar_one_or_none()
+    
+    if not db_feedback:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+        
+    # Security/Ownership check: Ensure student only rates their own feedback (BOLA/IDOR)
+    if db_feedback.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden: You are not authorized to rate this feedback")
+        
+    # Validate rating value (must be 1 or -1)
+    if rate_payload.rating not in [1, -1]:
+        raise HTTPException(status_code=400, detail="Invalid rating value. Must be 1 or -1")
+        
+    db_feedback.rating = rate_payload.rating
+    await db.commit()
+    return {"status": "success", "rating": db_feedback.rating}
+

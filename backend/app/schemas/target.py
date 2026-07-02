@@ -11,6 +11,7 @@ class TargetCreate(BaseModel):
     title: str | None = None
     description: str | None = None
     deadline: datetime | None = None
+    randomize_problems: bool = False
 
 class TargetResponse(BaseModel):
     id: uuid.UUID
@@ -22,6 +23,7 @@ class TargetResponse(BaseModel):
     title: str | None = None
     description: str | None = None
     deadline: datetime | None = None
+    randomize_problems: bool = False
 
     class Config:
         from_attributes = True

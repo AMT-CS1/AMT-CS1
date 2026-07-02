@@ -25,7 +25,8 @@ async def configure_weekly_target(
         source=target.source,
         title=target.title,
         description=target.description,
-        deadline=target.deadline
+        deadline=target.deadline,
+        randomize_problems=target.randomize_problems
     )
     db.add(db_target)
     await db.commit()
@@ -63,6 +64,7 @@ async def update_weekly_target(
     db_target.title = target_in.title
     db_target.description = target_in.description
     db_target.deadline = target_in.deadline
+    db_target.randomize_problems = target_in.randomize_problems
     
     await db.commit()
     await db.refresh(db_target)
