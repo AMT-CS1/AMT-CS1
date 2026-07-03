@@ -1,0 +1,11 @@
+program CircleCalculatorMul
+dictionary
+    const pi = 3.14159
+    r, area, circum : real
+algorithm
+    read r
+    area <- pi * r * r
+    circum <- 2.0 * pi * r
+    write area
+    write circum
+endprogram

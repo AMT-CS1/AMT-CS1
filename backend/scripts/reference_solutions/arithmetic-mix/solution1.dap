@@ -1,0 +1,9 @@
+program ArithmeticMix
+dictionary
+    a, b, result : integer
+algorithm
+    read a
+    read b
+    result <- (a + b) * (a - b)
+    write result
+endprogram

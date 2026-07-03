@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Calendar, AlertCircle, CheckCircle, RefreshCw, Pencil, Trash2, Shuffle, Plus, X } from 'lucide-react';
+import { Calendar, AlertCircle, CheckCircle, RefreshCw, Pencil, Trash2, Shuffle, Plus, X, FlaskConical, KeyRound, Clock } from 'lucide-react';
 import { KcInfo, getKcDisplayName } from '@/lib/kc-utils';
+import { SkeletonCardGrid } from '@/components/Skeleton';
 
 interface TestCase {
   input: string;
@@ -29,9 +30,26 @@ interface Homework {
   source: string;
   deadline?: string;
   randomize_problems: boolean;
+  kind?: 'homework' | 'lab';
+  starts_at?: string | null;
+  access_password?: string | null;
 }
 
-export default function HomeworkManager() {
+const LAB_DURATION_MINUTES = 100;
+
+const toLocalInputValue = (dateStr: string): string => {
+  const dateObj = new Date(dateStr);
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  const hours = String(dateObj.getHours()).padStart(2, '0');
+  const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
+export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homework' | 'lab' }) {
+  const isPracticum = kind === 'lab';
+  const kindLabel = isPracticum ? 'Practicum' : 'Homework';
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [kcList, setKcList] = useState<KcInfo[]>([]);
@@ -45,6 +63,8 @@ export default function HomeworkManager() {
   const [targetTask, setTargetTask] = useState('');
   const [deadline, setDeadline] = useState('');
   const [randomizeProblems, setRandomizeProblems] = useState(false);
+  const [startsAt, setStartsAt] = useState('');
+  const [accessPassword, setAccessPassword] = useState('');
   
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
@@ -81,8 +101,10 @@ export default function HomeworkManager() {
       setProblems(problemsData);
       setKcList(kcsData);
       
-      // Sort homeworks by week ascending
-      const sortedHomeworks = homeworksData.sort((a: Homework, b: Homework) => a.week - b.week);
+      // Keep only targets of this page's kind, sorted by week ascending
+      const sortedHomeworks = homeworksData
+        .filter((t: Homework) => (t.kind || 'homework') === kind)
+        .sort((a: Homework, b: Homework) => a.week - b.week);
       setHomeworks(sortedHomeworks);
     } catch (err: any) {
       console.error(err);
@@ -111,21 +133,18 @@ export default function HomeworkManager() {
     setSelectedKcs(hw.topic_kc_focus.split(',').map(k => k.trim()).filter(Boolean));
     setTargetTask(hw.target_task);
     setRandomizeProblems(hw.randomize_problems);
-    if (hw.deadline) {
-      try {
-        const dateObj = new Date(hw.deadline);
-        const year = dateObj.getFullYear();
-        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-        const day = String(dateObj.getDate()).padStart(2, '0');
-        const hours = String(dateObj.getHours()).padStart(2, '0');
-        const minutes = String(dateObj.getMinutes()).padStart(2, '0');
-        setDeadline(`${year}-${month}-${day}T${hours}:${minutes}`);
-      } catch (e) {
-        console.error('Failed to parse deadline date', e);
-        setDeadline('');
-      }
-    } else {
+    setAccessPassword(hw.access_password || '');
+    try {
+      setDeadline(hw.deadline ? toLocalInputValue(hw.deadline) : '');
+    } catch (e) {
+      console.error('Failed to parse deadline date', e);
       setDeadline('');
+    }
+    try {
+      setStartsAt(hw.starts_at ? toLocalInputValue(hw.starts_at) : '');
+    } catch (e) {
+      console.error('Failed to parse starts_at date', e);
+      setStartsAt('');
     }
     setError('');
     setSubmitSuccess(false);
@@ -140,8 +159,11 @@ export default function HomeworkManager() {
     setSelectedKcs([]);
     setTargetTask('');
     setRandomizeProblems(false);
+    setStartsAt('');
+    setAccessPassword('');
     setError('');
     setSubmitSuccess(false);
+    setSubmitting(false);
     setIsDrawerOpen(false);
   };
 
@@ -153,7 +175,7 @@ export default function HomeworkManager() {
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || 'Failed to delete homework.');
+        throw new Error(data.error || `Failed to delete ${kindLabel.toLowerCase()}.`);
       }
       setConfirmDeleteId(null);
       await fetchData();
@@ -175,6 +197,25 @@ export default function HomeworkManager() {
       return;
     }
 
+    if (kind === 'lab') {
+      if (!startsAt) {
+        setError('Practicum sessions require a start time.');
+        setSubmitting(false);
+        return;
+      }
+      if (!accessPassword.trim()) {
+        setError('Practicum sessions require an access password to share in class.');
+        setSubmitting(false);
+        return;
+      }
+    }
+
+    // Practicums default to a 100-minute window when no explicit deadline is set
+    let effectiveDeadline = deadline ? new Date(deadline).toISOString() : null;
+    if (kind === 'lab' && !effectiveDeadline && startsAt) {
+      effectiveDeadline = new Date(new Date(startsAt).getTime() + LAB_DURATION_MINUTES * 60000).toISOString();
+    }
+
     const topicKcFocus = selectedKcs.join(',');
 
     try {
@@ -192,8 +233,11 @@ export default function HomeworkManager() {
           topic_kc_focus: topicKcFocus,
           target_task: targetTask,
           source: 'manual',
-          deadline: deadline ? new Date(deadline).toISOString() : null,
+          deadline: effectiveDeadline,
           randomize_problems: randomizeProblems,
+          kind,
+          starts_at: startsAt ? new Date(startsAt).toISOString() : null,
+          access_password: kind === 'lab' && accessPassword.trim() ? accessPassword.trim() : null,
         }),
       });
 
@@ -212,7 +256,7 @@ export default function HomeworkManager() {
       
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'An error occurred while publishing the homework.');
+      setError(err.message || `An error occurred while publishing the ${kindLabel.toLowerCase()}.`);
       setSubmitting(false);
     }
   };
@@ -225,9 +269,11 @@ export default function HomeworkManager() {
           <div className="flex items-center justify-between mb-5">
             <div>
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">
-                Current Homework Schedule ({homeworks.length})
+                Current {kindLabel} Schedule ({homeworks.length})
               </h2>
-              <p className="text-[10px] text-slate-405 mt-0.5">Assigned coding homework tasks per week</p>
+              <p className="text-[10px] text-slate-405 mt-0.5">
+                {isPracticum ? 'Scheduled in-class practicum sessions per week' : 'Assigned coding homework tasks per week'}
+              </p>
             </div>
             <button 
               onClick={fetchData}
@@ -239,11 +285,11 @@ export default function HomeworkManager() {
           </div>
 
           {loading ? (
-            <div className="py-12 flex justify-center items-center">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></div>
-            </div>
+            <SkeletonCardGrid cards={4} />
           ) : homeworks.length === 0 ? (
-            <p className="text-xs text-slate-400 py-6 text-center font-medium">No homeworks currently assigned.</p>
+            <p className="text-xs text-slate-400 py-6 text-center font-medium">
+              {isPracticum ? 'No practicum sessions currently scheduled.' : 'No homeworks currently assigned.'}
+            </p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {homeworks.map((hw) => (
@@ -275,6 +321,21 @@ export default function HomeworkManager() {
                             </div>
                           )}
                           <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                            {hw.kind === 'lab' && (
+                              <span className="inline-flex items-center gap-1 text-[9px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full font-bold">
+                                <FlaskConical className="h-2.5 w-2.5" /> Practicum
+                                {hw.starts_at && (
+                                  <span className="font-semibold">
+                                    · {new Date(hw.starts_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                            {hw.kind === 'lab' && hw.access_password && (
+                              <span className="inline-flex items-center gap-1 text-[9px] bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded-full font-bold font-mono">
+                                <KeyRound className="h-2.5 w-2.5" /> {hw.access_password}
+                              </span>
+                            )}
                             {hw.randomize_problems && (
                               <span className="inline-flex items-center gap-1 text-[9px] bg-violet-50 text-violet-700 border border-violet-100 px-1.5 py-0.5 rounded-full font-bold">
                                 <Shuffle className="h-2.5 w-2.5" /> Random
@@ -350,7 +411,7 @@ export default function HomeworkManager() {
           setIsDrawerOpen(true);
         }}
         className="fixed bottom-8 right-8 z-45 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl hover:scale-105 active:scale-95 transition-all"
-        title="Publish New Homework"
+        title={`Publish New ${kindLabel}`}
       >
         <Plus className="h-6 w-6" />
       </button>
@@ -369,7 +430,7 @@ export default function HomeworkManager() {
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <div>
               <h2 className="text-base font-bold uppercase tracking-wider text-indigo-600">
-                {editingHomework ? 'Edit Homework Assignment' : 'Publish New Homework'}
+                {editingHomework ? `Edit ${kindLabel} Assignment` : `Publish New ${kindLabel}`}
               </h2>
               <p className="text-[10px] text-slate-450 mt-0.5 font-medium">
                 {editingHomework 
@@ -396,7 +457,7 @@ export default function HomeworkManager() {
           {submitSuccess && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 flex items-start space-x-2 text-xs text-emerald-800">
               <CheckCircle className="h-4.5 w-4.5 flex-shrink-0 mt-0.5 text-emerald-650" />
-              <span>{editingHomework ? 'Homework successfully updated!' : 'Homework successfully published to course schedule!'}</span>
+              <span>{editingHomework ? `${kindLabel} successfully updated!` : `${kindLabel} successfully published to course schedule!`}</span>
             </div>
           )}
 
@@ -427,15 +488,81 @@ export default function HomeworkManager() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1.5">Deadline (Optional)</label>
-            <input
-              type="datetime-local"
-              value={deadline}
-              onChange={(e) => setDeadline(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-hidden bg-white text-slate-800"
-            />
-          </div>
+          {isPracticum && (
+            <div className="rounded-lg border border-amber-100 bg-amber-50/40 p-3 flex items-start space-x-2">
+              <FlaskConical className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-600" />
+              <p className="text-[10px] text-slate-600">
+                Practicum sessions are locked until the start time, require the in-class password, have no concept-check quizzes, and auto-grade at the deadline.
+              </p>
+            </div>
+          )}
+
+          {kind === 'lab' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5 flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-amber-500" /> Session Start *
+                </label>
+                <input
+                  type="datetime-local"
+                  value={startsAt}
+                  onChange={(e) => setStartsAt(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-amber-500 focus:outline-hidden bg-white text-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5 flex items-center gap-1.5">
+                  <KeyRound className="h-3.5 w-3.5 text-amber-500" /> Session Password *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Share this in class only"
+                  value={accessPassword}
+                  onChange={(e) => setAccessPassword(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-amber-500 focus:outline-hidden font-mono"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5 flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-indigo-500" /> Start Time (Optional)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={startsAt}
+                  onChange={(e) => setStartsAt(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-hidden bg-white text-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5">
+                  Deadline (Optional)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-hidden bg-white text-slate-800"
+                />
+              </div>
+            </div>
+          )}
+
+          {kind === 'lab' && (
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-1.5">
+                Deadline (defaults to start + {LAB_DURATION_MINUTES} minutes)
+              </label>
+              <input
+                type="datetime-local"
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:border-indigo-500 focus:outline-hidden bg-white text-slate-800"
+              />
+            </div>
+          )}
 
           {/* KC Focus Selection */}
           <div>
@@ -489,7 +616,7 @@ export default function HomeworkManager() {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1.5">Homework Instructions *</label>
+            <label className="block text-xs font-bold text-slate-600 mb-1.5">{kindLabel} Instructions *</label>
             <textarea
               placeholder="Detailed coding instructions for the student..."
               value={targetTask}

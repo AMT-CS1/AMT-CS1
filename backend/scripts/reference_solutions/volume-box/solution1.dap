@@ -1,0 +1,10 @@
+program VolumeBox
+dictionary
+    length, width, height, vol : integer
+algorithm
+    read length
+    read width
+    read height
+    vol <- length * width * height
+    write vol
+endprogram

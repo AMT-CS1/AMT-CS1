@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { decodeJwt } from '@/lib/auth';
 import SignOutButton from '@/components/SignOutButton';
-import { ClipboardCheck, BarChart3, Users, GraduationCap, Code, FileText } from 'lucide-react';
+import { ClipboardCheck, BarChart3, Users, GraduationCap, Code, FileText, FlaskConical } from 'lucide-react';
 import Link from 'next/link';
 
 export default async function InstructorLayout({
@@ -40,6 +40,13 @@ export default async function InstructorLayout({
             >
               <ClipboardCheck className="h-4.5 w-4.5" />
               <span>Homework</span>
+            </Link>
+            <Link
+              href="/instructor/practicum"
+              className="flex items-center space-x-3 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+            >
+              <FlaskConical className="h-4.5 w-4.5" />
+              <span>Practicum</span>
             </Link>
             <Link
               href="/instructor/problems"
@@ -88,12 +95,6 @@ export default async function InstructorLayout({
         <header className="h-16 border-b border-slate-200 px-8 flex items-center justify-between bg-white shadow-xs">
           <h2 className="text-lg font-bold text-slate-800 tracking-wide">Instructor Console</h2>
           <div className="flex items-center space-x-4">
-            <Link
-              href="/status"
-              className="text-xs font-semibold text-indigo-650 hover:text-indigo-700 transition-colors"
-            >
-              API Status
-            </Link>
           </div>
         </header>
 

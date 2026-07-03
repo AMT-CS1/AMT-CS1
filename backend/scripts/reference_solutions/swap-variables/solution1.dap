@@ -1,0 +1,12 @@
+program SwapVariables
+dictionary
+    x, y, temp : integer
+algorithm
+    read x
+    read y
+    temp <- x
+    x <- y
+    y <- temp
+    write x
+    write y
+endprogram

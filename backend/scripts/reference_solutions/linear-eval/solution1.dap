@@ -1,0 +1,8 @@
+program LinearEval
+dictionary
+    x, y : integer
+algorithm
+    read x
+    y <- 5 * x + 10
+    write y
+endprogram

@@ -9,6 +9,10 @@ class AttemptCreate(BaseModel):
     source: str = Field(..., max_length=100)
     confidence_level: float | None = None
     lang: str | None = "en"
+    # Target (homework/lab) the submission belongs to — enables deadline,
+    # start-time, and lab-password enforcement.
+    target_id: uuid.UUID | None = None
+    lab_password: str | None = None
 
 class AttemptResponse(BaseModel):
     id: uuid.UUID
@@ -32,6 +36,7 @@ class TestCaseResultSchema(BaseModel):
     actual: str
     passed: bool
     error: Optional[str] = None
+    hidden: bool = False
 
 class MisconceptionSchema(BaseModel):
     code: str
@@ -48,4 +53,7 @@ class AttemptEvaluationResponse(BaseModel):
     test_results: List[TestCaseResultSchema]
     feedback: Optional[str] = None
     misconceptions: Optional[List[MisconceptionSchema]] = None
+    p_matrix: Optional[List[int]] = None
+    q_matrix: Optional[List[int]] = None
+    matrix_similar: Optional[bool] = None
 

@@ -1,0 +1,9 @@
+program GreetingGenerator
+dictionary
+    name : string
+    age : integer
+algorithm
+    read name
+    read age
+    write "Hello " + name + ", you are ", age, " years old!"
+endprogram

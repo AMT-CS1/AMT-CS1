@@ -1,0 +1,9 @@
+program TaxCalculator
+dictionary
+    const tax_rate = 0.15
+    total, tax : real
+algorithm
+    read total
+    tax <- total * tax_rate
+    write tax
+endprogram

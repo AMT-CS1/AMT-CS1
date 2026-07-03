@@ -1,0 +1,12 @@
+program EvenOddChecker
+dictionary
+    n, result : integer
+algorithm
+    read n
+    if n % 2 == 0 then
+        result <- 1
+    else
+        result <- 0
+    endif
+    write result
+endprogram

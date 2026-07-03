@@ -1,0 +1,7 @@
+program DoubleIO
+dictionary
+    x : integer
+algorithm
+    read x
+    write x
+endprogram

@@ -71,6 +71,6 @@ def test_detect_misconceptions_on_bundled_sample():
         return detect_misconceptions(buggy, correct)
 
     results = asyncio.run(run())
-    assert len(results) > 0
-    for m in results:
-        assert set(m.keys()) == {"code", "title", "description", "detail", "buggy_expr"}
+    # Generic logic differences (like i <- 0 vs i <- 1) are now filtered out,
+    # so this sample returns an empty list.
+    assert len(results) == 0

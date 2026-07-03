@@ -142,22 +142,23 @@ async def evaluate_student_attempt(problem_or_ref: object, code: str) -> dict:
     compilation_error = None
     
     # We can gather test runs concurrently!
-    async def run_case(idx, tc_input, tc_expected):
+    async def run_case(idx, tc_input, tc_expected, tc_hidden):
         run = await run_dap_code(code, stdin_data=tc_input)
-        return idx, tc_input, tc_expected, run
+        return idx, tc_input, tc_expected, tc_hidden, run
 
     tasks = []
     for idx, tc in enumerate(test_cases):
         tc_input = tc["input"] if isinstance(tc, dict) else getattr(tc, "input", "")
         tc_expected = tc["expected"] if isinstance(tc, dict) else getattr(tc, "expected", "")
-        tasks.append(run_case(idx, tc_input, tc_expected))
+        tc_hidden = tc.get("hidden", False) if isinstance(tc, dict) else getattr(tc, "hidden", False)
+        tasks.append(run_case(idx, tc_input, tc_expected, tc_hidden))
         
     runs = await asyncio.gather(*tasks)
     
     # Sort runs by index to maintain ordering
     runs.sort(key=lambda x: x[0])
     
-    for idx, tc_input, tc_expected, run in runs:
+    for idx, tc_input, tc_expected, tc_hidden, run in runs:
         if not run["success"] and "timed out" in run.get("error", ""):
             test_results.append({
                 "test_case_index": idx + 1,
@@ -165,7 +166,8 @@ async def evaluate_student_attempt(problem_or_ref: object, code: str) -> dict:
                 "expected": tc_expected,
                 "actual": "",
                 "passed": False,
-                "error": run["error"]
+                "error": run["error"],
+                "hidden": tc_hidden
             })
             all_passed = False
             continue
@@ -179,7 +181,8 @@ async def evaluate_student_attempt(problem_or_ref: object, code: str) -> dict:
                 "expected": tc_expected,
                 "actual": "",
                 "passed": False,
-                "error": compilation_error
+                "error": compilation_error,
+                "hidden": tc_hidden
             })
             continue
             
@@ -199,7 +202,8 @@ async def evaluate_student_attempt(problem_or_ref: object, code: str) -> dict:
             "expected": tc_expected.strip(),
             "actual": actual_output.strip(),
             "passed": passed,
-            "error": None
+            "error": None,
+            "hidden": tc_hidden
         })
         
     return {

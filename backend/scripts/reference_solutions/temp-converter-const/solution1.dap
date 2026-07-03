@@ -1,0 +1,10 @@
+program TempConverter
+dictionary
+    const scale = 1.8
+    const offset = 32.0
+    f, c : real
+algorithm
+    read f
+    c <- (f - offset) / scale
+    write c
+endprogram

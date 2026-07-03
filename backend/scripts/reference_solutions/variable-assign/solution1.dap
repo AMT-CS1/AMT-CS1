@@ -1,0 +1,9 @@
+program VariableAssign
+dictionary
+    x, val : integer
+algorithm
+    read x
+    val <- x * 2
+    val <- val + 5
+    write val
+endprogram

@@ -1,0 +1,14 @@
+program SignChecker
+dictionary
+    x, res : integer
+algorithm
+    read x
+    if x > 0 then
+        res <- 1
+    elif x < 0 then
+        res <- -1
+    else
+        res <- 0
+    endif
+    write res
+endprogram

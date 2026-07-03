@@ -16,6 +16,17 @@ class ProblemCreate(BaseModel):
     kc_tags: str = Field(default="", max_length=255)
     reference_solution: str | None = None
 
+class ReferenceFileIn(BaseModel):
+    filename: str = Field(..., max_length=120)
+    content: str = Field(..., max_length=50000)
+
+class ReferenceFilesUpload(BaseModel):
+    files: List[ReferenceFileIn] = Field(..., min_length=1)
+
+class ReferenceFileOut(BaseModel):
+    filename: str
+    content: str | None = None
+
 class ProblemResponse(BaseModel):
     id: uuid.UUID
     key: str

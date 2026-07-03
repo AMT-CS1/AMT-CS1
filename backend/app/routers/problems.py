@@ -7,17 +7,55 @@ import uuid
 from app.core.security import RoleChecker
 from app.core.database import get_db
 from app.core.misconception import generate_ast_json
+from app.core.references import (
+    delete_reference_file,
+    list_reference_filenames,
+    load_reference_files,
+    sanitize_reference_filename,
+    upload_reference_file,
+)
 from app.models.problem import Problem
-from app.schemas.problem import ProblemCreate, ProblemResponse
+from app.schemas.problem import (
+    ProblemCreate,
+    ProblemResponse,
+    ReferenceFileOut,
+    ReferenceFilesUpload,
+    TestCaseSchema,
+)
 
 router = APIRouter(prefix="/problems", tags=["problems"])
 
 
 def serialize_problem(problem: Problem, role: str) -> ProblemResponse:
-    """Serialize a problem, hiding the reference solution from non-instructors."""
-    resp = ProblemResponse.model_validate(problem)
+    """Serialize a problem, hiding the reference solution and hidden test cases from non-instructors."""
+    # Filter test cases if not instructor
+    test_cases = problem.test_cases or []
     if role != "instructor":
-        resp.reference_solution = None
+        visible_test_cases = [
+            tc for tc in test_cases
+            if not (isinstance(tc, dict) and tc.get("hidden", False))
+        ]
+    else:
+        visible_test_cases = test_cases
+
+    # Construct ProblemResponse with filtered test cases
+    resp = ProblemResponse(
+        id=problem.id,
+        key=problem.key,
+        title=problem.title,
+        description_en=problem.description_en,
+        description_id=problem.description_id,
+        starter_code=problem.starter_code,
+        test_cases=[
+            TestCaseSchema(
+                input=tc.get("input", "") if isinstance(tc, dict) else getattr(tc, "input", ""),
+                expected=tc.get("expected", "") if isinstance(tc, dict) else getattr(tc, "expected", "")
+            )
+            for tc in visible_test_cases
+        ],
+        kc_tags=problem.kc_tags,
+        reference_solution=problem.reference_solution if role == "instructor" else None
+    )
     return resp
 
 
@@ -78,6 +116,82 @@ async def get_problem(
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
     return serialize_problem(problem, current_user.get("role"))
+
+async def _get_problem_by_id(id: uuid.UUID, db: AsyncSession) -> Problem:
+    res = await db.execute(select(Problem).where(Problem.id == id))
+    db_problem = res.scalar_one_or_none()
+    if not db_problem:
+        raise HTTPException(status_code=404, detail="Problem not found")
+    return db_problem
+
+
+@router.get("/{id}/references", response_model=List[ReferenceFileOut])
+async def list_problem_references(
+    id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["instructor", "rater"]))
+):
+    """Reference solution files stored under problems/{id}_{key}/reference_solution/."""
+    db_problem = await _get_problem_by_id(id, db)
+    files = await load_reference_files(db_problem, with_ast=False)
+    return [ReferenceFileOut(filename=f["filename"], content=f["content"]) for f in files]
+
+
+@router.post("/{id}/references", response_model=List[ReferenceFileOut], status_code=201)
+async def upload_problem_references(
+    id: uuid.UUID,
+    payload: ReferenceFilesUpload,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["instructor"]))
+):
+    """
+    Attach one or more reference solution files to a problem. Every file must
+    compile; its AST is cached next to it so misconception detection never has
+    to re-invoke the compiler.
+    """
+    db_problem = await _get_problem_by_id(id, db)
+
+    validated: list[tuple[str, str, dict]] = []
+    for f in payload.files:
+        try:
+            filename = sanitize_reference_filename(f.filename)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"{f.filename}: {e}")
+        content = f.content.strip()
+        if not content:
+            raise HTTPException(status_code=400, detail=f"{filename}: file is empty")
+        ast = await generate_ast_json(content)
+        if ast is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{filename}: reference solution does not compile"
+            )
+        validated.append((filename, content, ast))
+
+    for filename, content, ast in validated:
+        await upload_reference_file(db_problem, filename, content, ast)
+
+    files = await load_reference_files(db_problem, with_ast=False)
+    return [ReferenceFileOut(filename=f["filename"], content=f["content"]) for f in files]
+
+
+@router.delete("/{id}/references/{filename}", status_code=204)
+async def delete_problem_reference(
+    id: uuid.UUID,
+    filename: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["instructor"]))
+):
+    db_problem = await _get_problem_by_id(id, db)
+    try:
+        safe_name = sanitize_reference_filename(filename)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if safe_name not in await list_reference_filenames(db_problem):
+        raise HTTPException(status_code=404, detail="Reference file not found")
+    await delete_reference_file(db_problem, safe_name)
+    return {}
+
 
 @router.post("", response_model=ProblemResponse, status_code=201)
 async def create_or_update_problem(

@@ -64,7 +64,38 @@ DEFAULT_PROBLEMS = {
         "test_cases": [
             {"input": "5\n10\n", "expected": "10\n5"},
             {"input": "-3\n42\n", "expected": "42\n-3"},
-            {"input": "100\n100\n", "expected": "100\n100"}
+            {"input": "100\n100\n", "expected": "100\n100"},
+            {"input": "7\n9\n", "expected": "9\n7", "hidden": True}
+        ],
+        "reference_solutions": [
+            (
+                "program SwapVariables\n"
+                "dictionary\n"
+                "    x, y, temp : integer\n"
+                "algorithm\n"
+                "    read x\n"
+                "    read y\n"
+                "    temp <- x\n"
+                "    x <- y\n"
+                "    y <- temp\n"
+                "    write x\n"
+                "    write y\n"
+                "endprogram\n"
+            ),
+            (
+                "program SwapVariables\n"
+                "dictionary\n"
+                "    x, y, temp : integer\n"
+                "algorithm\n"
+                "    read x\n"
+                "    read y\n"
+                "    temp <- y\n"
+                "    y <- x\n"
+                "    x <- temp\n"
+                "    write x\n"
+                "    write y\n"
+                "endprogram\n"
+            )
         ]
     },
     "factorial": {
@@ -108,7 +139,40 @@ DEFAULT_PROBLEMS = {
             {"input": "5\n", "expected": "120"},
             {"input": "0\n", "expected": "1"},
             {"input": "3\n", "expected": "6"},
-            {"input": "7\n", "expected": "5040"}
+            {"input": "7\n", "expected": "5040"},
+            {"input": "4\n", "expected": "24", "hidden": True}
+        ],
+        "reference_solutions": [
+            (
+                "program Factorial\n"
+                "dictionary\n"
+                "    n, fact, i : integer\n"
+                "algorithm\n"
+                "    read n\n"
+                "    fact <- 1\n"
+                "    i <- 1\n"
+                "    while i <= n do\n"
+                "        fact <- fact * i\n"
+                "        i <- i + 1\n"
+                "    endwhile\n"
+                "    write fact\n"
+                "endprogram\n"
+            ),
+            (
+                "program Factorial\n"
+                "dictionary\n"
+                "    n, fact, i : integer\n"
+                "algorithm\n"
+                "    read n\n"
+                "    fact <- 1\n"
+                "    i <- n\n"
+                "    while i > 0 do\n"
+                "        fact <- fact * i\n"
+                "        i <- i - 1\n"
+                "    endwhile\n"
+                "    write fact\n"
+                "endprogram\n"
+            )
         ]
     },
     "circle-calc": {
@@ -146,7 +210,36 @@ DEFAULT_PROBLEMS = {
         ),
         "test_cases": [
             {"input": "1.0\n", "expected": "3.14159\n6.28318"},
-            {"input": "2.0\n", "expected": "12.56636\n12.56636"}
+            {"input": "2.0\n", "expected": "12.56636\n12.56636"},
+            {"input": "3.0\n", "expected": "28.27431\n18.84954", "hidden": True}
+        ],
+        "reference_solutions": [
+            (
+                "program CircleCalculator\n"
+                "dictionary\n"
+                "    const pi = 3.14159\n"
+                "    r, area, circum : real\n"
+                "algorithm\n"
+                "    read r\n"
+                "    area <- pi * r * r\n"
+                "    circum <- 2.0 * pi * r\n"
+                "    write area\n"
+                "    write circum\n"
+                "endprogram\n"
+            ),
+            (
+                "program CircleCalculator\n"
+                "dictionary\n"
+                "    const pi = 3.14159\n"
+                "    r, area, circum : real\n"
+                "algorithm\n"
+                "    read r\n"
+                "    area <- pi * (r ^ 2)\n"
+                "    circum <- pi * 2.0 * r\n"
+                "    write area\n"
+                "    write circum\n"
+                "endprogram\n"
+            )
         ]
     },
     "even-odd": {
@@ -181,7 +274,37 @@ DEFAULT_PROBLEMS = {
         "test_cases": [
             {"input": "4\n", "expected": "1"},
             {"input": "7\n", "expected": "0"},
-            {"input": "0\n", "expected": "1"}
+            {"input": "0\n", "expected": "1"},
+            {"input": "11\n", "expected": "0", "hidden": True}
+        ],
+        "reference_solutions": [
+            (
+                "program EvenOddChecker\n"
+                "dictionary\n"
+                "    n, result : integer\n"
+                "algorithm\n"
+                "    read n\n"
+                "    if n % 2 == 0 then\n"
+                "        result <- 1\n"
+                "    else\n"
+                "        result <- 0\n"
+                "    endif\n"
+                "    write result\n"
+                "endprogram\n"
+            ),
+            (
+                "program EvenOddChecker\n"
+                "dictionary\n"
+                "    n, result : integer\n"
+                "algorithm\n"
+                "    read n\n"
+                "    result <- 0\n"
+                "    if n % 2 == 0 then\n"
+                "        result <- 1\n"
+                "    endif\n"
+                "    write result\n"
+                "endprogram\n"
+            )
         ]
     },
     "quadratic-eval": {
@@ -216,7 +339,30 @@ DEFAULT_PROBLEMS = {
         "test_cases": [
             {"input": "2\n", "expected": "20"},
             {"input": "0\n", "expected": "-2"},
-            {"input": "-1\n", "expected": "-4"}
+            {"input": "-1\n", "expected": "-4"},
+            {"input": "1\n", "expected": "6", "hidden": True}
+        ],
+        "reference_solutions": [
+            (
+                "program QuadraticEvaluator\n"
+                "dictionary\n"
+                "    x, y : integer\n"
+                "algorithm\n"
+                "    read x\n"
+                "    y <- 3 * x * x + 5 * x - 2\n"
+                "    write y\n"
+                "endprogram\n"
+            ),
+            (
+                "program QuadraticEvaluator\n"
+                "dictionary\n"
+                "    x, y : integer\n"
+                "algorithm\n"
+                "    read x\n"
+                "    y <- 3 * (x ^ 2) + 5 * x - 2\n"
+                "    write y\n"
+                "endprogram\n"
+            )
         ]
     },
     "greeting-gen": {
@@ -248,7 +394,21 @@ DEFAULT_PROBLEMS = {
         ),
         "test_cases": [
             {"input": "John\n25\n", "expected": "Hello John, you are 25 years old!"},
-            {"input": "Alice\n18\n", "expected": "Hello Alice, you are 18 years old!"}
+            {"input": "Alice\n18\n", "expected": "Hello Alice, you are 18 years old!"},
+            {"input": "Bob\n30\n", "expected": "Hello Bob, you are 30 years old!", "hidden": True}
+        ],
+        "reference_solutions": [
+            (
+                "program GreetingGenerator\n"
+                "dictionary\n"
+                "    name : string\n"
+                "    age : integer\n"
+                "algorithm\n"
+                "    read name\n"
+                "    read age\n"
+                "    write \"Hello \" + name + \", you are \" + age + \" years old!\"\n"
+                "endprogram\n"
+            )
         ]
     },
     "max-three": {
@@ -285,7 +445,46 @@ DEFAULT_PROBLEMS = {
         "test_cases": [
             {"input": "10\n20\n15\n", "expected": "20"},
             {"input": "5\n2\n9\n", "expected": "9"},
-            {"input": "-3\n-7\n-5\n", "expected": "-3"}
+            {"input": "-3\n-7\n-5\n", "expected": "-3"},
+            {"input": "4\n4\n2\n", "expected": "4", "hidden": True}
+        ],
+        "reference_solutions": [
+            (
+                "program MaxThree\n"
+                "dictionary\n"
+                "    a, b, c, max_val : integer\n"
+                "algorithm\n"
+                "    read a\n"
+                "    read b\n"
+                "    read c\n"
+                "    if a >= b and a >= c then\n"
+                "        max_val <- a\n"
+                "    elif b >= a and b >= c then\n"
+                "        max_val <- b\n"
+                "    else\n"
+                "        max_val <- c\n"
+                "    endif\n"
+                "    write max_val\n"
+                "endprogram\n"
+            ),
+            (
+                "program MaxThree\n"
+                "dictionary\n"
+                "    a, b, c, max_val : integer\n"
+                "algorithm\n"
+                "    read a\n"
+                "    read b\n"
+                "    read c\n"
+                "    max_val <- a\n"
+                "    if b > max_val then\n"
+                "        max_val <- b\n"
+                "    endif\n"
+                "    if c > max_val then\n"
+                "        max_val <- c\n"
+                "    endif\n"
+                "    write max_val\n"
+                "endprogram\n"
+            )
         ]
     },
     "sum-n": {
@@ -323,7 +522,40 @@ DEFAULT_PROBLEMS = {
         ),
         "test_cases": [
             {"input": "5\n", "expected": "15"},
-            {"input": "10\n", "expected": "55"}
+            {"input": "10\n", "expected": "55"},
+            {"input": "6\n", "expected": "21", "hidden": True}
+        ],
+        "reference_solutions": [
+            (
+                "program SumN\n"
+                "dictionary\n"
+                "    n, total, i : integer\n"
+                "algorithm\n"
+                "    read n\n"
+                "    total <- 0\n"
+                "    i <- 1\n"
+                "    while i <= n do\n"
+                "        total <- total + i\n"
+                "        i <- i + 1\n"
+                "    endwhile\n"
+                "    write total\n"
+                "endprogram\n"
+            ),
+            (
+                "program SumN\n"
+                "dictionary\n"
+                "    n, total, i : integer\n"
+                "algorithm\n"
+                "    read n\n"
+                "    total <- 0\n"
+                "    i <- n\n"
+                "    while i > 0 do\n"
+                "        total <- total + i\n"
+                "        i <- i - 1\n"
+                "    endwhile\n"
+                "    write total\n"
+                "endprogram\n"
+            )
         ]
     },
     "sum-evens": {
@@ -363,7 +595,42 @@ DEFAULT_PROBLEMS = {
         ),
         "test_cases": [
             {"input": "6\n", "expected": "12"},
-            {"input": "3\n", "expected": "2"}
+            {"input": "3\n", "expected": "2"},
+            {"input": "5\n", "expected": "6", "hidden": True}
+        ],
+        "reference_solutions": [
+            (
+                "program SumEvens\n"
+                "dictionary\n"
+                "    n, sum, i : integer\n"
+                "algorithm\n"
+                "    read n\n"
+                "    sum <- 0\n"
+                "    i <- 1\n"
+                "    while i <= n do\n"
+                "        if i % 2 == 0 then\n"
+                "            sum <- sum + i\n"
+                "        endif\n"
+                "        i <- i + 1\n"
+                "    endwhile\n"
+                "    write sum\n"
+                "endprogram\n"
+            ),
+            (
+                "program SumEvens\n"
+                "dictionary\n"
+                "    n, sum, i : integer\n"
+                "algorithm\n"
+                "    read n\n"
+                "    sum <- 0\n"
+                "    i <- 2\n"
+                "    while i <= n do\n"
+                "        sum <- sum + i\n"
+                "        i <- i + 2\n"
+                "    endwhile\n"
+                "    write sum\n"
+                "endprogram\n"
+            )
         ]
     }
 }
@@ -695,7 +962,8 @@ async def seed_demo(reset: bool = False):
                     "2. Swap their values (use temp as helper).\n"
                     "3. Write the value of x, then write y."
                 ),
-                "deadline": datetime(2026, 6, 28, 23, 59, 0),
+                "starts_at": datetime(2026, 6, 22, 0, 0, 0),
+                "deadline": datetime(2027, 6, 28, 23, 59, 0),
                 "source": "manual"
             },
             {
@@ -716,7 +984,8 @@ async def seed_demo(reset: bool = False):
                     "2. Loop to calculate the factorial, storing it in fact.\n"
                     "3. Write the value of fact."
                 ),
-                "deadline": datetime(2026, 7, 5, 23, 59, 0),
+                "starts_at": datetime(2026, 6, 29, 0, 0, 0),
+                "deadline": datetime(2027, 7, 5, 23, 59, 0),
                 "source": "manual"
             },
             {
@@ -729,7 +998,8 @@ async def seed_demo(reset: bool = False):
                 "target_task": (
                     "Write a program that reads the radius r of a circle and calculates its area and circumference using the constant pi = 3.14159."
                 ),
-                "deadline": datetime(2026, 7, 12, 23, 59, 0),
+                "starts_at": datetime(2026, 7, 6, 0, 0, 0),
+                "deadline": datetime(2027, 7, 12, 23, 59, 0),
                 "source": "manual"
             },
             {
@@ -742,7 +1012,8 @@ async def seed_demo(reset: bool = False):
                 "target_task": (
                     "Write a program that reads an integer n and checks if it is even or odd using the modulo operator %."
                 ),
-                "deadline": datetime(2026, 7, 19, 23, 59, 0),
+                "starts_at": datetime(2026, 7, 13, 0, 0, 0),
+                "deadline": datetime(2027, 7, 19, 23, 59, 0),
                 "source": "manual"
             },
             {
@@ -755,7 +1026,8 @@ async def seed_demo(reset: bool = False):
                 "target_task": (
                     "Write a program that evaluates the expression y = 3*x^2 + 5*x - 2 for a given integer x."
                 ),
-                "deadline": datetime(2026, 7, 26, 23, 59, 0),
+                "starts_at": datetime(2026, 7, 20, 0, 0, 0),
+                "deadline": datetime(2027, 7, 26, 23, 59, 0),
                 "source": "manual"
             },
             {
@@ -768,7 +1040,8 @@ async def seed_demo(reset: bool = False):
                 "target_task": (
                     "Write a program that reads a user's name and age, and prints a greeting message."
                 ),
-                "deadline": datetime(2026, 8, 2, 23, 59, 0),
+                "starts_at": datetime(2026, 7, 27, 0, 0, 0),
+                "deadline": datetime(2027, 8, 2, 23, 59, 0),
                 "source": "manual"
             },
             {
@@ -781,7 +1054,8 @@ async def seed_demo(reset: bool = False):
                 "target_task": (
                     "Write a program that reads three integers and outputs the maximum value using if-elif-else."
                 ),
-                "deadline": datetime(2026, 8, 9, 23, 59, 0),
+                "starts_at": datetime(2026, 8, 3, 0, 0, 0),
+                "deadline": datetime(2027, 8, 9, 23, 59, 0),
                 "source": "manual"
             },
             {
@@ -794,7 +1068,8 @@ async def seed_demo(reset: bool = False):
                 "target_task": (
                     "Write a program that computes the sum of numbers from 1 to n using a loop and total variable."
                 ),
-                "deadline": datetime(2026, 8, 16, 23, 59, 0),
+                "starts_at": datetime(2026, 8, 10, 0, 0, 0),
+                "deadline": datetime(2027, 8, 16, 23, 59, 0),
                 "source": "manual"
             },
             {
@@ -807,7 +1082,22 @@ async def seed_demo(reset: bool = False):
                 "target_task": (
                     "Write a program that calculates the sum of all even numbers from 1 to n."
                 ),
-                "deadline": datetime(2026, 8, 23, 23, 59, 0),
+                "starts_at": datetime(2026, 8, 17, 0, 0, 0),
+                "deadline": datetime(2027, 8, 23, 23, 59, 0),
+                "source": "manual"
+            },
+            {
+                "week": 10,
+                "topic_kc_focus": "VA",
+                "title": "Variable Swapping (Upcoming Homework)",
+                "description": (
+                    "Write a program that swaps variables. This homework is not open yet."
+                ),
+                "target_task": (
+                    "Write a program that swaps variables. This homework is not open yet."
+                ),
+                "starts_at": datetime(2027, 9, 1, 0, 0, 0),
+                "deadline": datetime(2027, 9, 7, 23, 59, 0),
                 "source": "manual"
             }
         ]
@@ -830,7 +1120,8 @@ async def seed_demo(reset: bool = False):
                     source=target_data["source"],
                     title=target_data["title"],
                     description=target_data["description"],
-                    deadline=target_data["deadline"]
+                    deadline=target_data["deadline"],
+                    starts_at=target_data.get("starts_at")
                 )
                 session.add(db_target)
                 print(f"Seeded WeeklyTarget for course CS1-PYTHON-2026 week {target_data['week']}")
@@ -840,9 +1131,102 @@ async def seed_demo(reset: bool = False):
                 existing_target.title = target_data["title"]
                 existing_target.description = target_data["description"]
                 existing_target.deadline = target_data["deadline"]
+                existing_target.starts_at = target_data.get("starts_at")
                 print(f"WeeklyTarget for course CS1-PYTHON-2026 week {target_data['week']} updated")
 
+        # 2.5 Seed Lab / Practicum Sessions tied to the demo course
+        from datetime import timedelta, timezone
+        # Stored naive UTC, matching how the targets router persists datetimes
+        now_val = datetime.now(timezone.utc).replace(tzinfo=None)
+        lab_duration = timedelta(minutes=100)
+        
+        labs_to_seed = [
+            {
+                "week": 90,
+                "title": "Lab 1: Loops & Variables (ACTIVE)",
+                "topic_kc_focus": "LO, VA",
+                "target_task": (
+                    "In-class practicum on loops and variables.\n\n"
+                    "Solve the three given problems before the session ends. "
+                    "Your grade is computed automatically at the deadline."
+                ),
+                "starts_at": now_val - timedelta(minutes=10),
+                "deadline": now_val - timedelta(minutes=10) + lab_duration,
+                "access_password": "lab123",
+            },
+            {
+                "week": 91,
+                "title": "Lab 2: Conditionals & Expressions (UPCOMING)",
+                "topic_kc_focus": "CD, EX",
+                "target_task": (
+                    "In-class practicum on conditionals and expressions.\n\n"
+                    "The session unlocks at the start time shown on the card. "
+                    "Bring the password shared by your instructor in class."
+                ),
+                "starts_at": now_val + timedelta(minutes=30),
+                "deadline": now_val + timedelta(minutes=30) + lab_duration,
+                "access_password": "lab456",
+            },
+            {
+                "week": 92,
+                "title": "Lab 3: Operators & I/O (ENDED)",
+                "topic_kc_focus": "OP, CO, IO",
+                "target_task": (
+                    "In-class practicum on operators, constants, and input/output.\n\n"
+                    "This session has ended; the automated grade is shown instead."
+                ),
+                "starts_at": now_val - timedelta(hours=3),
+                "deadline": now_val - timedelta(hours=3) + lab_duration,
+                "access_password": "lab789",
+            },
+        ]
+
+        for lab in labs_to_seed:
+            stmt = select(WeeklyTarget).where(
+                WeeklyTarget.course_ref == "CS1-PYTHON-2026",
+                WeeklyTarget.week == lab["week"],
+                WeeklyTarget.kind == "lab"
+            )
+            result = await session.execute(stmt)
+            existing_lab = result.scalar_one_or_none()
+
+            if not existing_lab:
+                db_lab = WeeklyTarget(
+                    id=uuid.uuid4(),
+                    course_ref="CS1-PYTHON-2026",
+                    week=lab["week"],
+                    topic_kc_focus=lab["topic_kc_focus"],
+                    target_task=lab["target_task"],
+                    source="seed",
+                    title=lab["title"],
+                    description=lab["target_task"],
+                    deadline=lab["deadline"],
+                    randomize_problems=False,
+                    kind="lab",
+                    starts_at=lab["starts_at"],
+                    access_password=lab["access_password"]
+                )
+                session.add(db_lab)
+                print(f"Seeded lab (week {lab['week']}): {lab['title']}")
+            else:
+                existing_lab.title = lab["title"]
+                existing_lab.topic_kc_focus = lab["topic_kc_focus"]
+                existing_lab.target_task = lab["target_task"]
+                existing_lab.description = lab["target_task"]
+                existing_lab.starts_at = lab["starts_at"]
+                existing_lab.deadline = lab["deadline"]
+                existing_lab.access_password = lab["access_password"]
+                print(f"Updated lab (week {lab['week']}): {lab['title']}")
+
         # 3. Seed Predefined Problems
+        from app.core.misconception import generate_ast_json
+        from app.core.references import upload_reference_file
+        from app.core.storage import init_storage
+        import anyio
+
+        # Ensure MinIO bucket is created
+        await anyio.to_thread.run_sync(init_storage)
+
         for key, prob_data in DEFAULT_PROBLEMS.items():
             stmt = select(Problem).where(Problem.key == key)
             result = await session.execute(stmt)
@@ -866,7 +1250,20 @@ async def seed_demo(reset: bool = False):
                 existing_prob.description_id = prob_data["description_id"]
                 existing_prob.starter_code = prob_data["starter_code"]
                 existing_prob.test_cases = prob_data["test_cases"]
+                db_prob = existing_prob
                 print(f"Problem updated: {key}")
+
+            # Upload reference solutions to MinIO
+            if "reference_solutions" in prob_data:
+                for idx, ref_content in enumerate(prob_data["reference_solutions"], start=1):
+                    filename = f"reference_{idx}.dap"
+                    ref_ast = await generate_ast_json(ref_content)
+                    if ref_ast is None:
+                        print(f"WARNING: Reference solution {idx} for {key} failed to compile!")
+                        continue
+                    # Upload to MinIO under problems/{problem_id}_{problem_key}/reference_solution/
+                    await upload_reference_file(db_prob, filename, ref_content, ref_ast)
+                    print(f"Uploaded reference solution {filename} for {key} to MinIO")
 
         # 4. Seed Hint Quizzes
         for problem_key, questions in DEFAULT_HINT_QUIZZES.items():

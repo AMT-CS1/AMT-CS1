@@ -1,0 +1,10 @@
+program CountDown
+dictionary
+    n : integer
+algorithm
+    read n
+    while n >= 1 do
+        write n
+        n <- n - 1
+    endwhile
+endprogram

@@ -1,0 +1,7 @@
+program EchoMessage
+dictionary
+    msg : string
+algorithm
+    read msg
+    write msg
+endprogram

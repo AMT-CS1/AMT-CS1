@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Q
 import json
 import uuid
 import anyio
+import math
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from typing import List, Optional
@@ -11,11 +12,14 @@ from app.core.database import get_db
 from app.core.storage import get_s3_client
 from app.core.config import settings
 from app.core.dap_runner import evaluate_student_attempt, generate_feedback
-from app.core.misconception import generate_ast_json, detect_misconceptions
+from app.core.misconception import generate_ast_json, detect_misconceptions_best
+from app.core.references import load_reference_asts, submission_prefix
 from app.models.log import InteractionLog
 from app.models.attempt import Attempt
 from app.models.problem import Problem
+from app.models.target import WeeklyTarget
 from app.models.quiz_progress import QuizProgress
+from app.routers.targets import as_utc, now_utc
 from app.schemas.attempt import AttemptCreate, AttemptEvaluationResponse, AttemptResponse
 
 
@@ -108,58 +112,159 @@ async def create_attempt(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(RoleChecker(["student"]))
 ):
-    # Security check: verify student has completed the corresponding Intermediate Exercise
     user_id = uuid.UUID(current_user["id"])
-    quiz_stmt = select(QuizProgress).where(
-        and_(QuizProgress.user_id == user_id, QuizProgress.problem_key == attempt.task_ref)
-    )
-    quiz_res = await db.execute(quiz_stmt)
-    quiz_progress = quiz_res.scalar_one_or_none()
-    
-    if quiz_progress is not None and quiz_progress.completed_at is None:
-        raise HTTPException(
-            status_code=403,
-            detail="You have an active Intermediate Exercise quiz in progress. You must complete it before submitting homework attempts."
-        )
 
-    # 1. Upload code to MinIO storage asynchronously
-    content_ref = await upload_code_to_minio(attempt.content)
-    
-    # 2. Retrieve the problem from the database
+    # Time-window and lab-password enforcement for the owning target
+    db_target = None
+    if attempt.target_id is not None:
+        target_res = await db.execute(select(WeeklyTarget).where(WeeklyTarget.id == attempt.target_id))
+        db_target = target_res.scalar_one_or_none()
+
+    if db_target is not None:
+        now = now_utc()
+        deadline = as_utc(db_target.deadline)
+        if deadline and now >= deadline:
+            raise HTTPException(
+                status_code=403,
+                detail="The deadline has passed. Submissions are closed and your grade has been finalized."
+            )
+        starts_at = as_utc(db_target.starts_at)
+        if starts_at and now < starts_at:
+            label = "lab session" if db_target.kind == "lab" else "homework assignment"
+            raise HTTPException(status_code=403, detail=f"This {label} has not started yet.")
+        if db_target.kind == "lab":
+            if db_target.access_password and attempt.lab_password != db_target.access_password:
+                raise HTTPException(status_code=403, detail="Invalid lab session password.")
+
+    # Security check: verify student has completed the corresponding Intermediate Exercise.
+    # Labs have no misconception probes, so the quiz gate only applies to homework.
+    if db_target is None or db_target.kind != "lab":
+        quiz_stmt = select(QuizProgress).where(
+            and_(QuizProgress.user_id == user_id, QuizProgress.problem_key == attempt.task_ref)
+        )
+        quiz_res = await db.execute(quiz_stmt)
+        quiz_progress = quiz_res.scalar_one_or_none()
+
+        if quiz_progress is not None and quiz_progress.completed_at is None:
+            raise HTTPException(
+                status_code=403,
+                detail="You have an active Intermediate Exercise quiz in progress. You must complete it before submitting homework attempts."
+            )
+
+    # 1. Retrieve the problem from the database
     problem_stmt = select(Problem).where(Problem.key == attempt.task_ref)
     problem_res = await db.execute(problem_stmt)
     db_problem = problem_res.scalars().first()
-    
+
+    # 2. Upload code to MinIO. Submissions live in the problem's folder
+    # (problems/{id}_{key}/code_submission/) next to its reference solutions;
+    # attempts without a matching problem row fall back to the flat attempts/ prefix.
+    attempt_id = uuid.uuid4()
+    if db_problem is not None:
+        content_ref = await upload_text_to_minio(
+            f"{submission_prefix(db_problem)}{attempt_id.hex}.dap", attempt.content
+        )
+    else:
+        content_ref = await upload_code_to_minio(attempt.content)
+
     # Evaluate the code asynchronously against problems and test cases using DAP runner
     eval_result = await evaluate_student_attempt(db_problem or attempt.task_ref, attempt.content)
 
     # 3. Compile the AST once and persist it to MinIO so later analyses
     # (misconception detection, P-Matrix) never need to re-invoke the compiler.
-    attempt_id = uuid.uuid4()
     ast_ref = None
     student_ast = None
     if eval_result["success"]:
         student_ast = await generate_ast_json(attempt.content)
         if student_ast is not None:
+            ast_key = (
+                f"{submission_prefix(db_problem)}{attempt_id.hex}.ast.json"
+                if db_problem is not None
+                else f"attempts/{attempt_id.hex}.ast.json"
+            )
             ast_ref = await upload_text_to_minio(
-                f"attempts/{attempt_id.hex}.ast.json",
+                ast_key,
                 json.dumps(student_ast),
                 content_type="application/json"
             )
 
-    # 4. On failed (but compiling) attempts, diff the AST against the problem's
-    # reference solution to detect misconceptions.
     misconceptions = None
-    if student_ast is not None and not eval_result["passed"] and db_problem is not None:
-        reference_ast = db_problem.reference_ast
-        if reference_ast is None and db_problem.reference_solution:
-            # Lazily compile and cache the reference AST on the problem row
-            reference_ast = await generate_ast_json(db_problem.reference_solution)
-            if reference_ast is not None:
-                db_problem.reference_ast = reference_ast
-        if reference_ast is not None:
-            detected = detect_misconceptions(student_ast, reference_ast)
+    candidate_asts = []
+    if student_ast is not None and db_problem is not None:
+        candidate_asts = [entry["ast"] for entry in await load_reference_asts(db_problem)]
+
+        legacy_ast = db_problem.reference_ast
+        if legacy_ast is None and db_problem.reference_solution:
+            # Lazily compile and cache the legacy reference AST on the problem row
+            legacy_ast = await generate_ast_json(db_problem.reference_solution)
+            if legacy_ast is not None:
+                db_problem.reference_ast = legacy_ast
+        if legacy_ast is not None:
+            candidate_asts.append(legacy_ast)
+
+        if not eval_result["passed"] and candidate_asts:
+            detected = detect_misconceptions_best(student_ast, candidate_asts)
             misconceptions = detected or None
+
+    # Compute QMatrix, PMatrix, and similarity check
+    q_matrix = None
+    p_matrix = None
+    matrix_similar = None
+    if db_problem is not None:
+        concepts = ["CO", "VA", "OP", "EX", "IO", "CD", "LO"]
+        problem_kcs = [c.strip().upper() for c in db_problem.kc_tags.split(",") if c.strip()]
+        
+        q_matrix = [0] * 7
+        for i, concept in enumerate(concepts):
+            if concept in problem_kcs:
+                q_matrix[i] = 1
+                
+        p_matrix = q_matrix.copy()
+        if not eval_result["success"]:
+            for i in range(len(p_matrix)):
+                if q_matrix[i] == 1:
+                    p_matrix[i] = 0
+        else:
+            from app.DAP.build_pmatrix import get_pmatrix_from_ast
+            # Compute P-Matrix using the AST diff failures algorithm in build_pmatrix.py
+            p_matrix = get_pmatrix_from_ast(student_ast, candidate_asts, q_matrix)
+            
+            # If the student's code is missing required concepts, fail verification and report them
+            if p_matrix != q_matrix:
+                eval_result["passed"] = False
+                if misconceptions is None:
+                    misconceptions = []
+                concept_names = {
+                    "CO": "Constant", "VA": "Variable", "OP": "Operation",
+                    "EX": "Expression", "IO": "Input/Output", "CD": "Conditional", "LO": "Loop"
+                }
+                for i in range(len(q_matrix)):
+                    if q_matrix[i] == 1 and p_matrix[i] == 0:
+                        mc = concepts[i]
+                        if not any(m.get("code", "").startswith(mc) for m in misconceptions):
+                            misconceptions.append({
+                                "code": f"{mc}-MISSING",
+                                "title": f"Missing {concept_names.get(mc, mc)} Logic",
+                                "description": f"Your code is missing required logic for {concept_names.get(mc, mc)}.",
+                                "detail": f"Your code is missing required logic for {concept_names.get(mc, mc)}. Please revise your code to include this logic.",
+                                "buggy_expr": "Missing code"
+                            })
+                            
+            # If student failed some test cases and p_matrix still matches q_matrix,
+            # mark the main required concepts in QMatrix as 0
+            elif not eval_result["passed"]:
+                for i in range(len(p_matrix)):
+                    if q_matrix[i] == 1:
+                        p_matrix[i] = 0
+                        
+        dot_product = sum(p * q for p, q in zip(p_matrix, q_matrix))
+        norm_p = math.sqrt(sum(p * p for p in p_matrix))
+        norm_q = math.sqrt(sum(q * q for q in q_matrix))
+        if norm_p > 0 and norm_q > 0:
+            similarity = dot_product / (norm_p * norm_q)
+        else:
+            similarity = 1.0 if p_matrix == q_matrix else 0.0
+        matrix_similar = (similarity >= 0.70)
 
     # 5. Save attempt details in PostgreSQL
     db_attempt = Attempt(
@@ -200,7 +305,13 @@ async def create_attempt(
                 "task_ref": db_attempt.task_ref,
                 "ast_ref": ast_ref,
                 "misconceptions": [
-                    {"code": m["code"], "title": m["title"], "detail": m["detail"]}
+                    {
+                        "code": m.get("code", "UNKNOWN"),
+                        "title": m.get("title", "Unknown Misconception"),
+                        "description": m.get("description", ""),
+                        "detail": m.get("detail", ""),
+                        "buggy_expr": m.get("buggy_expr", "")
+                    }
                     for m in misconceptions
                 ]
             }
@@ -218,7 +329,10 @@ async def create_attempt(
         compilation_error=eval_result["compilation_error"],
         test_results=eval_result["test_results"],
         feedback=feedback,
-        misconceptions=misconceptions
+        misconceptions=misconceptions,
+        p_matrix=p_matrix,
+        q_matrix=q_matrix,
+        matrix_similar=matrix_similar
     )
 
 @router.post("/speech", response_model=AttemptResponse, status_code=201)

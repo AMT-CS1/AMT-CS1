@@ -1,0 +1,15 @@
+program GradeClassifier
+dictionary
+    score : integer
+    grade : string
+algorithm
+    read score
+    if score >= 80 then
+        grade <- "A"
+    elif score >= 60 then
+        grade <- "B"
+    else
+        grade <- "C"
+    endif
+    write grade
+endprogram

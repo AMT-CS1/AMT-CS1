@@ -1,0 +1,9 @@
+program RemainderCalc
+dictionary
+    a, b, rem : integer
+algorithm
+    read a
+    read b
+    rem <- a % b
+    write rem
+endprogram

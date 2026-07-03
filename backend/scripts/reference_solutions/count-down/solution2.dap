@@ -1,0 +1,9 @@
+program CountDownFor
+dictionary
+    n, i : integer
+algorithm
+    read n
+    for i <- n to 1 step -1 do
+        write i
+    endfor
+endprogram

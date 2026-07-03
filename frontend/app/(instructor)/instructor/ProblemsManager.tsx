@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Code, CheckCircle, AlertCircle, RefreshCw, Pencil, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Trash2, Code, CheckCircle, AlertCircle, RefreshCw, Pencil, X, FileCode2, Paperclip } from 'lucide-react';
 import DapCodeEditor from '@/components/DapCodeEditor';
 import { KcInfo, getKcDisplayName } from '@/lib/kc-utils';
+import { SkeletonCardGrid } from '@/components/Skeleton';
 
 interface TestCase {
   input: string;
@@ -22,6 +23,12 @@ interface Problem {
   reference_solution?: string | null;
 }
 
+interface ReferenceFile {
+  filename: string;
+  content: string;
+  isNew: boolean;
+}
+
 export default function ProblemsManager() {
   const [problems, setProblems] = useState<Problem[]>([]);
   const [kcList, setKcList] = useState<KcInfo[]>([]);
@@ -37,7 +44,13 @@ export default function ProblemsManager() {
   const [referenceSolution, setReferenceSolution] = useState('');
   const [testCases, setTestCases] = useState<TestCase[]>([{ input: '', expected: '' }]);
   const [selectedKcs, setSelectedKcs] = useState<string[]>([]);
-  
+
+  // Reference solution files (stored in MinIO under problems/{id}_{key}/reference_solution/)
+  const [refFiles, setRefFiles] = useState<ReferenceFile[]>([]);
+  const [removedRefFiles, setRemovedRefFiles] = useState<string[]>([]);
+  const [refFilesLoading, setRefFilesLoading] = useState(false);
+  const refFileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
@@ -108,9 +121,71 @@ export default function ProblemsManager() {
     setReferenceSolution(prob.reference_solution || '');
     setTestCases(prob.test_cases.length > 0 ? prob.test_cases : [{ input: '', expected: '' }]);
     setSelectedKcs(prob.kc_tags ? prob.kc_tags.split(',').map(k => k.trim()).filter(Boolean) : []);
+    setRefFiles([]);
+    setRemovedRefFiles([]);
     setError('');
     setSubmitSuccess(false);
     setIsDrawerOpen(true);
+    // Load the problem's existing reference solution files
+    setRefFilesLoading(true);
+    fetch(`/api/problems/${prob.id}/references`)
+      .then(res => (res.ok ? res.json() : []))
+      .then((files: { filename: string; content: string | null }[]) => {
+        setRefFiles(files.map(f => ({ filename: f.filename, content: f.content || '', isNew: false })));
+      })
+      .catch(err => console.error('Failed to load reference files', err))
+      .finally(() => setRefFilesLoading(false));
+  };
+
+  const handleAttachRefFiles = (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    Array.from(fileList).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const content = String(reader.result || '');
+        setRefFiles(prev => {
+          // Re-attaching a file with the same name replaces it
+          const others = prev.filter(f => f.filename !== file.name);
+          return [...others, { filename: file.name, content, isNew: true }];
+        });
+        setRemovedRefFiles(prev => prev.filter(name => name !== file.name));
+      };
+      reader.readAsText(file);
+    });
+    if (refFileInputRef.current) refFileInputRef.current.value = '';
+  };
+
+  const handleRemoveRefFile = (filename: string) => {
+    const target = refFiles.find(f => f.filename === filename);
+    setRefFiles(prev => prev.filter(f => f.filename !== filename));
+    if (target && !target.isNew) {
+      setRemovedRefFiles(prev => [...prev, filename]);
+    }
+  };
+
+  // Push reference-file changes (uploads + deletions) after the problem row is saved
+  const syncRefFiles = async (problemId: string) => {
+    for (const filename of removedRefFiles) {
+      const res = await fetch(`/api/problems/${problemId}/references/${encodeURIComponent(filename)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok && res.status !== 404) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to delete reference file ${filename}.`);
+      }
+    }
+    const newFiles = refFiles.filter(f => f.isNew);
+    if (newFiles.length > 0) {
+      const res = await fetch(`/api/problems/${problemId}/references`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: newFiles.map(f => ({ filename: f.filename, content: f.content })) }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to upload reference solution files.');
+      }
+    }
   };
 
   const handleCancelEdit = () => {
@@ -123,8 +198,11 @@ export default function ProblemsManager() {
     setReferenceSolution('');
     setTestCases([{ input: '', expected: '' }]);
     setSelectedKcs([]);
+    setRefFiles([]);
+    setRemovedRefFiles([]);
     setError('');
     setSubmitSuccess(false);
+    setSubmitting(false);
     setIsDrawerOpen(false);
   };
 
@@ -194,6 +272,12 @@ export default function ProblemsManager() {
         throw new Error(data.error || 'Failed to save problem');
       }
 
+      // Sync attached reference solution files against the saved problem
+      const problemId = editingProblem?.id || data.id;
+      if (problemId) {
+        await syncRefFiles(problemId);
+      }
+
       setSubmitSuccess(true);
       
       // Keep drawer open for a brief success visual, then close or clear
@@ -231,9 +315,7 @@ export default function ProblemsManager() {
           </div>
 
           {loading ? (
-            <div className="py-12 flex justify-center items-center">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></div>
-            </div>
+            <SkeletonCardGrid cards={4} />
           ) : problems.length === 0 ? (
             <p className="text-xs text-slate-400 py-6 text-center">No coding problems found in database.</p>
           ) : (
@@ -479,6 +561,76 @@ export default function ProblemsManager() {
               onChange={setReferenceSolution}
               rows={8}
             />
+          </div>
+
+          {/* Reference Solution Files */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between border-t border-slate-100 pt-3">
+              <div>
+                <span className="text-xs font-bold text-slate-600">Reference Solution Files (.dap)</span>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Attach one or more alternative correct solutions. Each must compile; submissions are compared
+                  against the closest one. Stored in MinIO under <code className="font-mono">problems/&#123;id&#125;_&#123;key&#125;/reference_solution/</code>.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => refFileInputRef.current?.click()}
+                className="flex items-center space-x-1 text-xs font-bold text-indigo-650 hover:text-indigo-700 transition-colors shrink-0"
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+                <span>Attach Files</span>
+              </button>
+              <input
+                ref={refFileInputRef}
+                type="file"
+                accept=".dap,.txt,text/plain"
+                multiple
+                className="hidden"
+                onChange={(e) => handleAttachRefFiles(e.target.files)}
+              />
+            </div>
+
+            {refFilesLoading ? (
+              <div className="py-3 flex items-center space-x-2 text-[11px] text-slate-400 font-semibold">
+                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></div>
+                <span>Loading existing reference files...</span>
+              </div>
+            ) : refFiles.length === 0 ? (
+              <p className="text-[11px] text-slate-400 font-medium py-1.5">
+                No reference solution files attached yet.
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {refFiles.map((f) => (
+                  <div
+                    key={f.filename}
+                    className="flex items-center justify-between rounded-lg border border-slate-150 bg-slate-50/50 px-3 py-2"
+                  >
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <FileCode2 className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                      <span className="text-[11px] font-mono font-bold text-slate-700 truncate">{f.filename}</span>
+                      {f.isNew && (
+                        <span className="text-[8px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded-full uppercase">
+                          New
+                        </span>
+                      )}
+                      <span className="text-[9px] text-slate-400 font-medium shrink-0">
+                        {f.content.split('\n').length} lines
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveRefFile(f.filename)}
+                      className="p-1 rounded text-slate-400 hover:text-rose-600 transition-colors shrink-0"
+                      title="Remove file"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Test cases section */}

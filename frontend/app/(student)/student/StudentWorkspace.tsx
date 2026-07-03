@@ -6,9 +6,11 @@ import {
   Sparkles, Play, Code2, CheckCircle2, XCircle,
   AlertCircle, RefreshCw, ChevronRight, ArrowLeft,
   Lock, Unlock, Calendar, Award, BookOpen, Clock,
-  Shuffle, ThumbsUp, ThumbsDown
+  Shuffle, ThumbsUp, ThumbsDown, FlaskConical, KeyRound
 } from 'lucide-react';
 import DapCodeEditor from '@/components/DapCodeEditor';
+import ProblemMarkdown from '@/components/ProblemMarkdown';
+import { Skeleton } from '@/components/Skeleton';
 import { KcInfo, getKcDisplayName, DEFAULT_STARTER_CODE } from '@/lib/kc-utils';
 
 interface WeeklyTarget {
@@ -22,11 +24,32 @@ interface WeeklyTarget {
   description?: string;
   deadline?: string;
   randomize_problems?: boolean;
+  kind?: 'homework' | 'lab';
+  starts_at?: string | null;
+  requires_password?: boolean;
+}
+
+interface TargetGrade {
+  target_id: string;
+  kind: string;
+  total_problems: number;
+  solved_problems: number;
+  grade: number;
+  solved_keys: string[];
+  problem_reviews?: {
+    problem_key: string;
+    problem_title: string;
+    last_submitted_at: string | null;
+    student_code: string | null;
+    reference_code: string | null;
+    misconceptions: any[];
+  }[];
 }
 
 interface StudentWorkspaceProps {
   initialTargets: WeeklyTarget[];
   selectedTargetId?: string;
+  mode?: 'homework' | 'lab';
 }
 
 interface QuizQuestion {
@@ -52,6 +75,17 @@ interface Problem {
   kc_tags: string;
 }
 
+const formatCountdown = (ms: number): string => {
+  if (ms <= 0) return '00:00';
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const mm = String(minutes).padStart(2, '0');
+  const ss = String(seconds).padStart(2, '0');
+  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
+};
+
 const formatDeadline = (dateStr: string): string => {
   const d = new Date(dateStr);
   const options: Intl.DateTimeFormatOptions = {
@@ -69,10 +103,19 @@ const formatDeadline = (dateStr: string): string => {
   return `${dateFormatted} at ${timeFormatted}`;
 };
 
-export default function StudentWorkspace({ initialTargets, selectedTargetId }: StudentWorkspaceProps) {
+const formatShortDate = (d: Date): string =>
+  d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
+const formatTimeOnly = (d: Date): string =>
+  d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+export default function StudentWorkspace({ initialTargets, selectedTargetId, mode = 'homework' }: StudentWorkspaceProps) {
   const router = useRouter();
+  const basePath = mode === 'lab' ? '/student/practicum' : '/student';
   const [targets] = useState<WeeklyTarget[]>(() => {
-    return [...(initialTargets || [])].sort((a, b) => a.week - b.week);
+    return [...(initialTargets || [])]
+      .filter(t => (t.kind || 'homework') === mode)
+      .sort((a, b) => a.week - b.week);
   });
   const [problems, setProblems] = useState<Problem[]>([]);
   const [kcList, setKcList] = useState<KcInfo[]>([]);
@@ -124,6 +167,73 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
   const [quizFinishedKeys, setQuizFinishedKeys] = useState<string[]>([]);
   const [quizFeedback, setQuizFeedback] = useState<{ id: string; text: string } | null>(null);
   const [quizFeedbackRating, setQuizFeedbackRating] = useState<number | null>(null);
+
+  // Time-window (lab locks, deadlines) and automated-grade states
+  const [nowTick, setNowTick] = useState<number>(() => Date.now());
+  const [grades, setGrades] = useState<Record<string, TargetGrade>>({});
+  const [labUnlocked, setLabUnlocked] = useState(false);
+  const [labPasswordInput, setLabPasswordInput] = useState('');
+  const [unlockError, setUnlockError] = useState('');
+  const [unlocking, setUnlocking] = useState(false);
+
+  const hasStarted = (t: WeeklyTarget) => !t.starts_at || nowTick >= new Date(t.starts_at).getTime();
+  const isEnded = (t: WeeklyTarget) => !!t.deadline && nowTick >= new Date(t.deadline).getTime();
+
+  useEffect(() => {
+    const interval = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch automated grades for targets whose deadline has passed
+  const endedTargetIds = targets.filter(isEnded).map(t => t.id).join(',');
+  useEffect(() => {
+    targets.filter(isEnded).forEach(t => {
+      setGrades(prev => {
+        if (prev[t.id]) return prev;
+        fetch(`/api/targets/grade?target_id=${t.id}`)
+          .then(res => (res.ok ? res.json() : null))
+          .then(data => {
+            if (data) setGrades(g => ({ ...g, [t.id]: data }));
+          })
+          .catch(err => console.error('Failed to fetch grade', err));
+        return prev;
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [endedTargetIds]);
+
+  // Restore lab unlock from this browser session
+  useEffect(() => {
+    if (mode === 'lab' && selectedTargetId && typeof window !== 'undefined') {
+      setLabUnlocked(!!sessionStorage.getItem(`amt_lab_pw_${selectedTargetId}`));
+      setLabPasswordInput('');
+      setUnlockError('');
+    }
+  }, [mode, selectedTargetId]);
+
+  const handleUnlockLab = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTarget || !labPasswordInput.trim()) return;
+    setUnlocking(true);
+    setUnlockError('');
+    try {
+      const res = await fetch('/api/targets/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_id: selectedTarget.id, password: labPasswordInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to unlock the practicum session.');
+      }
+      sessionStorage.setItem(`amt_lab_pw_${selectedTarget.id}`, labPasswordInput.trim());
+      setLabUnlocked(true);
+    } catch (err: any) {
+      setUnlockError(err.message || 'Invalid password.');
+    } finally {
+      setUnlocking(false);
+    }
+  };
 
   useEffect(() => {
     setIsMounted(true);
@@ -218,7 +328,6 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
           }
         }
 
-        // Randomly select 3 problems (using random shuffle cached in localStorage)
         const shuffled = [...matching].sort(() => 0.5 - Math.random());
         const selected = shuffled.slice(0, 3);
         localStorage.setItem(cacheKey, JSON.stringify(selected.map(p => p.key)));
@@ -406,6 +515,8 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
 
   useEffect(() => {
     const checkQuizStatus = async () => {
+      // Practicums (kind 'lab') have no misconception probes / concept-check quizzes
+      if (mode === 'lab') return;
       if (!selectedTarget || problems.length === 0 || !currentProblem) return;
 
       const taskRef = currentProblem.key;
@@ -539,7 +650,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
     } catch (err) {
       console.error('Failed to log click_solve_homework:', err);
     }
-    router.push(`/student/solve/${target.id}`);
+    router.push(`${basePath}/solve/${target.id}`);
   };
 
   const resetTemplate = () => {
@@ -573,6 +684,10 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
           source: 'manual',
           confidence_level: 1.0,
           lang: descLang,
+          target_id: selectedTarget.id,
+          lab_password: mode === 'lab'
+            ? sessionStorage.getItem(`amt_lab_pw_${selectedTarget.id}`)
+            : undefined,
         }),
       });
 
@@ -584,9 +699,17 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
 
       setEvalResult(data);
 
+      console.log('Submission concept matrix evaluation:', {
+        q_matrix: data.q_matrix,
+        p_matrix: data.p_matrix,
+        matrix_similar: data.matrix_similar,
+        data: data
+      });
+
       // Wrong submission: immediately offer the hint quiz (Misconception Probe).
       // Also shown when the quiz was completed before — students can retake it.
-      if (!(data.success && data.passed)) {
+      // Practicums are quiz-free: the focus is solely on solving the problems.
+      if (mode !== 'lab' && !(data.success && data.passed)) {
         setShowHintPrompt(true);
       }
 
@@ -644,15 +767,16 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
         <div className="rounded-2xl border border-teal-150 bg-gradient-to-r from-teal-50/70 to-emerald-50/70 p-6 shadow-xs">
           <div className="flex items-start space-x-4">
             <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-teal-500/10 border border-teal-500/20 text-teal-600">
-              <Award className="h-6 w-6" />
+              {mode === 'lab' ? <FlaskConical className="h-6 w-6" /> : <Award className="h-6 w-6" />}
             </div>
             <div>
               <h1 className="text-xl font-extrabold text-slate-900 sm:text-2xl tracking-tight">
-                My Homework Assignments
+                {mode === 'lab' ? 'Practicum Sessions' : 'My Homework Assignments'}
               </h1>
               <p className="mt-1 text-xs text-slate-650 leading-relaxed max-w-2xl">
-                Solve coding exercises progressively to build your algorithm design skills.
-                Assignments must be solved in order. Complete each assignment to unlock the next week.
+                {mode === 'lab'
+                  ? 'In-class practicum sessions. Each practicum unlocks at its start time, requires the password your instructor shares in class, and is graded automatically at the deadline.'
+                  : 'Solve coding exercises progressively to build your algorithm design skills. Assignments must be solved in order. Complete each assignment to unlock the next week.'}
               </p>
             </div>
           </div>
@@ -661,7 +785,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
             <div className="mt-6 border-t border-teal-100/50 pt-5">
               <div className="flex items-center justify-between text-xs font-bold text-teal-900 mb-2">
                 <span>PROGRESS REPORT</span>
-                <span>{completionCount} / {targets.length} Homework Completed</span>
+                <span>{completionCount} / {targets.length} {mode === 'lab' ? 'Practicums' : 'Homework'} Completed</span>
               </div>
               <div className="w-full bg-slate-200/60 rounded-full h-2.5 overflow-hidden">
                 <div
@@ -686,18 +810,29 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
         )}
 
         <div className="space-y-4">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Course Schedule</h2>
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+            {mode === 'lab' ? 'Practicum Schedule' : 'Course Schedule'}
+          </h2>
 
           {targets.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center">
-              <BookOpen className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-              <p className="text-sm text-slate-500 font-semibold">No homeworks published yet.</p>
+              {mode === 'lab' ? (
+                <FlaskConical className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+              ) : (
+                <BookOpen className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+              )}
+              <p className="text-sm text-slate-500 font-semibold">
+                {mode === 'lab' ? 'No practicum sessions published yet.' : 'No homeworks published yet.'}
+              </p>
               <p className="text-xs text-slate-400 mt-1">Please ask the instructor to seed or tie targets.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {targets.map((target, idx) => {
-                const unlocked = isTargetUnlocked(idx);
+                const ended = isMounted && isEnded(target);
+                const timeLocked = isMounted && !hasStarted(target);
+                const unlocked = mode === 'lab' ? (!timeLocked && !ended) : (isTargetUnlocked(idx) && !timeLocked);
+                const gradeInfo = ended ? grades[target.id] : undefined;
                 const completed = isTargetCompleted(target);
                 const assigned = getProblemsForTarget(target);
                 const solvedCount = (solvedProblemKeys[target.id] || []).length;
@@ -724,7 +859,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                            Homework {target.week}
+                            {mode === 'lab' ? 'Practicum' : 'Homework'} {target.week}
                           </span>
                           {target.randomize_problems && (
                             <span className="inline-flex items-center gap-1 text-[8px] bg-violet-50 text-violet-700 border border-violet-100 px-1.5 py-0.2 rounded-full font-bold">
@@ -733,7 +868,11 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
                           )}
                         </div>
 
-                        {completed ? (
+                        {ended ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[10px] font-bold text-amber-700">
+                            <Clock className="h-3 w-3" /> Ended{gradeInfo ? ` — Grade: ${gradeInfo.grade}` : ''}
+                          </span>
+                        ) : completed ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
                             <CheckCircle2 className="h-3 w-3" /> Completed
                           </span>
@@ -743,7 +882,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[10px] font-bold text-slate-500">
-                            <Lock className="h-3 w-3" /> Locked
+                            <Lock className="h-3 w-3" /> {timeLocked ? 'Opens Soon' : 'Locked'}
                           </span>
                         )}
                       </div>
@@ -759,23 +898,121 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
                           {description}
                         </p>
                       </div>
+
+                      {/* Lab session schedule: start, end, and duration at a glance */}
+                      {mode === 'lab' && target.starts_at && isMounted && (() => {
+                        const start = new Date(target.starts_at);
+                        const end = target.deadline ? new Date(target.deadline) : null;
+                        const sameDay = !!end && start.toDateString() === end.toDateString();
+                        const durationMin = end ? Math.round((end.getTime() - start.getTime()) / 60000) : null;
+                        return (
+                          <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-amber-700">
+                                <Calendar className="h-3 w-3" />
+                                <span>Session Schedule</span>
+                              </span>
+                              {durationMin !== null && durationMin > 0 && (
+                                <span className="text-[9px] font-bold text-amber-700 bg-amber-100/80 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                                  {durationMin} min
+                                </span>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="rounded-lg bg-white/70 border border-amber-100 px-2.5 py-1.5">
+                                <span className="block text-[8px] font-bold uppercase tracking-wider text-slate-400">Starts</span>
+                                <span className="block text-[12px] font-extrabold text-slate-800">{formatTimeOnly(start)}</span>
+                                <span className="block text-[9px] font-semibold text-slate-500">{formatShortDate(start)}</span>
+                              </div>
+                              <div className="rounded-lg bg-white/70 border border-amber-100 px-2.5 py-1.5">
+                                <span className="block text-[8px] font-bold uppercase tracking-wider text-slate-400">Ends</span>
+                                <span className="block text-[12px] font-extrabold text-slate-800">{end ? formatTimeOnly(end) : '—'}</span>
+                                <span className="block text-[9px] font-semibold text-slate-500">
+                                  {end ? (sameDay ? 'Same day' : formatShortDate(end)) : 'No deadline set'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Homework timeline: start, end/due at a glance */}
+                      {mode === 'homework' && isMounted && (() => {
+                        const start = target.starts_at ? new Date(target.starts_at) : null;
+                        const end = target.deadline ? new Date(target.deadline) : null;
+                        const sameDay = start && end && start.toDateString() === end.toDateString();
+                        return (
+                          <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-indigo-700">
+                                <Calendar className="h-3 w-3" />
+                                <span>Assignment Timeline</span>
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="rounded-lg bg-white/70 border border-indigo-100 px-2.5 py-1.5">
+                                <span className="block text-[8px] font-bold uppercase tracking-wider text-slate-400">Available From</span>
+                                <span className="block text-[12px] font-extrabold text-slate-800">{start ? formatTimeOnly(start) : 'Immediately'}</span>
+                                <span className="block text-[9px] font-semibold text-slate-500">{start ? formatShortDate(start) : 'Open'}</span>
+                              </div>
+                              <div className="rounded-lg bg-white/70 border border-indigo-100 px-2.5 py-1.5">
+                                <span className="block text-[8px] font-bold uppercase tracking-wider text-slate-400">Due Date</span>
+                                <span className="block text-[12px] font-extrabold text-slate-800">{end ? formatTimeOnly(end) : '—'}</span>
+                                <span className="block text-[9px] font-semibold text-slate-500">
+                                  {end ? (sameDay ? 'Same day' : formatShortDate(end)) : 'No deadline set'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
-                    <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between">
-                      <div className="flex items-center space-x-1.5 text-slate-450 text-[11px] font-medium">
-                        <Clock className="h-3.5 w-3.5" />
-                        <span className="truncate max-w-[150px]">Due: {deadline}</span>
-                      </div>
+                    <div className="pt-3.5 border-t border-slate-100 flex items-center justify-between">
+                      {mode === 'lab' ? (
+                        <div className={`flex items-center space-x-1.5 text-[11px] ${!isMounted || ended
+                          ? 'text-slate-450 font-medium'
+                          : timeLocked
+                            ? 'text-slate-500 font-bold'
+                            : 'text-amber-600 font-bold'
+                          }`}>
+                          <Clock className="h-3.5 w-3.5" />
+                          <span className="truncate max-w-[170px] font-mono">
+                            {!isMounted
+                              ? `Week ${target.week}`
+                              : ended
+                                ? 'Session ended'
+                                : timeLocked && target.starts_at
+                                  ? `Opens in ${formatCountdown(new Date(target.starts_at).getTime() - nowTick)}`
+                                  : target.deadline
+                                    ? `Ends in ${formatCountdown(new Date(target.deadline).getTime() - nowTick)}`
+                                    : 'In session'}
+                          </span>
+                        </div>
+                      ) : (
+                        <div />
+                      )}
 
-                      {unlocked ? (
+                      {ended ? (
+                        <button
+                          onClick={() => handleStartHomework(target)}
+                          className="flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-all"
+                        >
+                          <Award className="h-3.5 w-3.5" />
+                          <span>View Grade</span>
+                        </button>
+                      ) : unlocked ? (
                         <button
                           onClick={() => handleStartHomework(target)}
                           className={`flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-bold transition-all ${completed
                             ? 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
-                            : 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:brightness-105 text-white hover:shadow-md'
+                            : mode === 'lab'
+                              ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-105 text-white hover:shadow-md'
+                              : 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:brightness-105 text-white hover:shadow-md'
                             }`}
                         >
-                          <span>{completed ? 'Review Code' : 'Solve Homework'}</span>
+                          {mode === 'lab' && !completed && <KeyRound className="h-3.5 w-3.5" />}
+                          <span>{completed ? 'Review Code' : mode === 'lab' ? 'Enter Practicum' : 'Solve Homework'}</span>
                           <ChevronRight className="h-3.5 w-3.5" />
                         </button>
                       ) : (
@@ -1039,6 +1276,319 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
     );
   }
 
+  // Deadline passed: submissions are closed — show the automated grade instead of the editor.
+  // isEnded re-evaluates every second, so a student inside the page is switched
+  // to the grade view automatically the moment the deadline is reached.
+  if (selectedTarget && isMounted && isEnded(selectedTarget)) {
+    const gradeInfo = grades[selectedTarget.id];
+    const isLab = selectedTarget.kind === 'lab';
+
+    if (isLab) {
+      return (
+        <div className="max-w-xl mx-auto my-8">
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm text-center space-y-4">
+            <div className="flex h-12 w-12 mx-auto items-center justify-center rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600">
+              <FlaskConical className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-sm font-extrabold text-slate-900">
+                Practicum Session Ended
+              </h2>
+              <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                Submissions are closed and your grade has been finalized automatically.
+              </p>
+            </div>
+            {gradeInfo ? (
+              <div className="space-y-1">
+                <div className="text-5xl font-extrabold text-indigo-600">{gradeInfo.grade}</div>
+                <p className="text-[11px] font-bold text-slate-500">
+                  {gradeInfo.solved_problems} / {gradeInfo.total_problems} problems solved
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 flex flex-col items-center">
+                <Skeleton className="h-12 w-24" />
+                <Skeleton className="h-2.5 w-36" />
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => router.push(basePath)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 px-4 py-2 text-[11px] font-bold text-slate-600 transition-all cursor-pointer"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>Back to Practicum Sessions</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Homework Review Dashboard
+    return (
+      <div className="max-w-5xl mx-auto my-8 space-y-6">
+        {/* Header Summary Card */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 shrink-0">
+              <Award className="h-6 w-6" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-base font-extrabold text-slate-900">Homework Review</h2>
+              <p className="text-[11px] text-slate-500 max-w-md leading-relaxed">
+                Submissions are closed. Review your final grade, submission history, reference solutions, and detected misconceptions.
+              </p>
+            </div>
+          </div>
+          {gradeInfo ? (
+            <div className="flex items-center gap-5">
+              <div className="text-right space-y-0.5">
+                <div className="text-3xl font-extrabold text-indigo-600">{gradeInfo.grade}</div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  {gradeInfo.solved_problems} / {gradeInfo.total_problems} Solved
+                </p>
+              </div>
+              <div className="h-8 w-px bg-slate-200" />
+              <button
+                type="button"
+                onClick={() => router.push(basePath)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 px-4 py-2.5 text-[11px] font-bold text-slate-600 transition-all cursor-pointer"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                <span>Back to Homework List</span>
+              </button>
+            </div>
+          ) : (
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></div>
+          )}
+        </div>
+
+        {/* Detailed reviews for each problem */}
+        {gradeInfo && gradeInfo.problem_reviews ? (
+          <div className="space-y-6">
+            {gradeInfo.problem_reviews.map((review, idx) => {
+              const lastSubTime = review.last_submitted_at ? new Date(review.last_submitted_at) : null;
+              const hasSubmitted = !!lastSubTime;
+              const isSolved = gradeInfo.solved_keys.includes(review.problem_key);
+
+              return (
+                <div key={review.problem_key} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+                  {/* Problem Title Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-105 border border-slate-200 text-xs font-bold text-slate-500">
+                        {idx + 1}
+                      </span>
+                      <h3 className="text-sm font-extrabold text-slate-800">{review.problem_title}</h3>
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-bold ${isSolved
+                        ? 'bg-emerald-50 border border-emerald-100 text-emerald-700'
+                        : 'bg-rose-50 border border-rose-100 text-rose-700'
+                        }`}>
+                        {isSolved ? (
+                          <>
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Solved
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="h-3 w-3 text-rose-600" /> Unsolved
+                          </>
+                        )}
+                      </span>
+                    </div>
+                    {hasSubmitted ? (
+                      <span className="text-[10px] text-slate-400 font-semibold">
+                        Last submission: {formatShortDate(lastSubTime)} at {formatTimeOnly(lastSubTime)}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-semibold">No submissions made</span>
+                    )}
+                  </div>
+
+                  {/* Code Views Side-by-Side */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                    {/* Student Submission */}
+                    <div className="space-y-1.5 flex flex-col">
+                      <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <Code2 className="h-3.5 w-3.5" />
+                        <span>Your Last Attempt</span>
+                      </h4>
+                      {review.student_code ? (
+                        <div className="flex-1 min-h-[250px] relative rounded-xl overflow-hidden border border-slate-200">
+                          <DapCodeEditor
+                            value={review.student_code}
+                            onChange={() => { }}
+                            readOnly={true}
+                            fillHeight={true}
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex-1 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-8 flex items-center justify-center text-center text-slate-400 text-xs font-semibold min-h-[250px]">
+                          No code submitted for this problem
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Reference Solution */}
+                    <div className="space-y-1.5 flex flex-col">
+                      <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-indigo-500" />
+                        <span>Reference Solution</span>
+                      </h4>
+                      {review.reference_code ? (
+                        <div className="flex-1 min-h-[250px] relative rounded-xl overflow-hidden border border-slate-200">
+                          <DapCodeEditor
+                            value={review.reference_code}
+                            onChange={() => { }}
+                            readOnly={true}
+                            fillHeight={true}
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex-1 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-8 flex items-center justify-center text-center text-slate-400 text-xs font-semibold min-h-[250px]">
+                          No reference solution available
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Misconceptions, if available */}
+                  {review.misconceptions && review.misconceptions.length > 0 && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-3.5 space-y-2 mt-4">
+                      <div className="flex items-center gap-1.5 text-amber-800 text-[10px] font-bold uppercase tracking-wider">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        <span>Misconceptions Detected in Last Attempt</span>
+                      </div>
+                      <div className="space-y-2">
+                        {review.misconceptions.map((m: any, mIdx: number) => (
+                          <div key={mIdx} className="rounded-lg border border-amber-100 bg-white/70 p-3 space-y-1 text-xs">
+                            <div className="font-bold text-slate-800">
+                              {m.title} {m.code && <span className="ml-1 px-1.5 py-0.2 bg-amber-100 text-amber-700 text-[9px] font-bold rounded-full">{m.code}</span>}
+                            </div>
+                            {m.description && <p className="text-slate-650 text-[10px] leading-relaxed">{m.description}</p>}
+                            {m.buggy_expr && (
+                              <pre className="p-2 bg-amber-50 border border-amber-100 rounded-md text-[9px] font-mono text-amber-900 overflow-x-auto whitespace-pre">
+                                {m.buggy_expr}
+                              </pre>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {[1, 2].map((i) => (
+              <div key={i} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <Skeleton className="h-6 w-6 rounded-lg" />
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                  </div>
+                  <Skeleton className="h-3.5 w-48" />
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <Skeleton className="h-3.5 w-32" />
+                    <Skeleton className="h-[250px] w-full rounded-xl" />
+                  </div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-3.5 w-32" />
+                    <Skeleton className="h-[250px] w-full rounded-xl" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Target is locked until the start time has been reached
+  if (selectedTarget && isMounted && !hasStarted(selectedTarget)) {
+    const msToStart = selectedTarget.starts_at ? new Date(selectedTarget.starts_at).getTime() - nowTick : 0;
+    const isLab = mode === 'lab';
+    const typeLabel = isLab ? 'Practicum Session' : 'Homework Assignment';
+    return (
+      <div className="max-w-xl mx-auto my-8">
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm text-center space-y-4">
+          <div className="flex h-12 w-12 mx-auto items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600">
+            <Lock className="h-6 w-6" />
+          </div>
+          <div>
+            <h2 className="text-sm font-extrabold text-slate-900">{typeLabel} Locked</h2>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+              This {typeLabel.toLowerCase()} opens {selectedTarget.starts_at ? `on ${formatDeadline(selectedTarget.starts_at)}` : 'soon'}.
+            </p>
+          </div>
+          <div className="text-3xl font-extrabold font-mono text-amber-600">{formatCountdown(msToStart)}</div>
+          <button
+            type="button"
+            onClick={() => router.push(basePath)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 px-4 py-2 text-[11px] font-bold text-slate-600 transition-all cursor-pointer"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span>{isLab ? 'Back to Practicum Sessions' : 'Back to Homework List'}</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Practicums require the in-class password before the workspace opens
+  if (mode === 'lab' && selectedTarget && !labUnlocked) {
+    return (
+      <div className="max-w-md mx-auto my-8">
+        <form onSubmit={handleUnlockLab} className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm text-center space-y-4">
+          <div className="flex h-12 w-12 mx-auto items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600">
+            <KeyRound className="h-6 w-6" />
+          </div>
+          <div>
+            <h2 className="text-sm font-extrabold text-slate-900">Enter Session Password</h2>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+              Your instructor shares the password at the start of the practicum session.
+            </p>
+          </div>
+          <input
+            type="text"
+            autoFocus
+            value={labPasswordInput}
+            onChange={(e) => setLabPasswordInput(e.target.value)}
+            placeholder="Session password"
+            className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-xs text-center font-mono focus:border-amber-500 focus:outline-hidden"
+          />
+          {unlockError && (
+            <p className="text-[11px] font-bold text-rose-600">{unlockError}</p>
+          )}
+          <button
+            type="submit"
+            disabled={unlocking || !labPasswordInput.trim()}
+            className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-105 px-4 py-2.5 text-[11px] font-bold text-white transition-all disabled:opacity-50 cursor-pointer"
+          >
+            {unlocking ? (
+              <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+            ) : (
+              <Unlock className="h-3.5 w-3.5" />
+            )}
+            <span>Unlock Practicum Session</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push(basePath)}
+            className="text-[11px] font-bold text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+          >
+            Back to Practicum Sessions
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   const title = selectedTarget?.title || (assignedProblems.length === 1 ? assignedProblems[0].title : '') || getKcDisplayName(selectedTarget?.topic_kc_focus ?? '', kcList);
   const deadline = selectedTarget && isMounted && selectedTarget.deadline ? formatDeadline(selectedTarget.deadline) : 'No deadline';
   const hasResultsContent = Boolean(evalResult || errorMessage || showHintPrompt);
@@ -1049,7 +1599,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
       <div className="bg-white rounded-xl border border-slate-200 px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="flex items-center space-x-2.5 min-w-0">
           <button
-            onClick={() => router.push('/student')}
+            onClick={() => router.push(basePath)}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-slate-700 hover:bg-slate-50 shadow-2xs transition-all"
             title="Go back to list"
           >
@@ -1058,15 +1608,18 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wider">
-                Homework {selectedTarget?.week}
+                {mode === 'lab' ? 'Practicum' : 'Homework'} {selectedTarget?.week}
               </span>
               <span className="hidden sm:inline-block text-[8px] font-bold text-slate-400 border border-slate-200 px-1.5 py-0.2 rounded-md">
                 Due: {deadline}
               </span>
-              {selectedTarget && isTargetCompleted(selectedTarget) && (
-                <span className="flex items-center gap-1 text-[8px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded-full">
-                  <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" />
-                  <span>Solved</span>
+              {isMounted && selectedTarget?.deadline && !isEnded(selectedTarget) && (
+                <span className={`flex items-center gap-1 text-[9px] font-bold font-mono px-1.5 py-0.2 rounded-md ${mode === 'lab'
+                  ? 'text-amber-700 bg-amber-50 border border-amber-200'
+                  : 'text-indigo-700 bg-indigo-50 border border-indigo-200'
+                  }`}>
+                  <Clock className="h-2.5 w-2.5 animate-pulse" />
+                  <span>{formatCountdown(new Date(selectedTarget.deadline).getTime() - nowTick)}</span>
                 </span>
               )}
             </div>
@@ -1148,9 +1701,9 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
             </div>
 
             <div>
-              <div className="prose prose-sm text-slate-600 text-[11px] leading-relaxed whitespace-pre-line">
-                {(descLang === 'id' ? currentProblem?.description_id : currentProblem?.description_en) || selectedTarget?.description || selectedTarget?.target_task}
-              </div>
+              <ProblemMarkdown
+                content={(descLang === 'id' ? currentProblem?.description_id : currentProblem?.description_en) || selectedTarget?.description || selectedTarget?.target_task || ''}
+              />
             </div>
 
             {currentProblem?.test_cases && currentProblem.test_cases.length > 0 && (
@@ -1265,6 +1818,17 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
               </div>
             )}
 
+            {evalResult && !evalResult.passed && evalResult.success && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-3 text-[11px] text-amber-800 flex items-start space-x-2.5">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 text-amber-500 mt-0.5" />
+                <span>
+                  {descLang === 'id'
+                    ? `Verifikasi gagal. ${evalResult.test_results.filter((tc: any) => tc.passed).length}/${evalResult.test_results.length} test case yang benar.`
+                    : `Verification failed. ${evalResult.test_results.filter((tc: any) => tc.passed).length}/${evalResult.test_results.length} correct.`}
+                </span>
+              </div>
+            )}
+
             {evalResult && (
               <div className="animate-slide-up-fade space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -1371,11 +1935,11 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId }: S
                   </div>
                 )}
 
-                {evalResult.test_results && evalResult.test_results.length > 0 && (
+                {evalResult.test_results && evalResult.test_results.length > 0 && evalResult.test_results.filter((tc: any) => !tc.hidden).length > 0 && (
                   <div className="space-y-3">
                     <h4 className="text-[11px] font-bold text-slate-700">Test Case Results</h4>
                     <div className="space-y-2.5">
-                      {evalResult.test_results.map((tc: any) => (
+                      {evalResult.test_results.filter((tc: any) => !tc.hidden).map((tc: any) => (
                         <div key={tc.test_case_index} className="rounded-xl border border-slate-150 p-3 space-y-2.5 bg-slate-50/50">
                           <div className="flex items-center justify-between text-[11px]">
                             <span className="font-bold text-slate-700">Test Case #{tc.test_case_index}</span>

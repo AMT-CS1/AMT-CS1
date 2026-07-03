@@ -67,12 +67,6 @@ export default async function ResearcherLayout({
         <header className="h-16 border-b border-slate-200 px-8 flex items-center justify-between bg-white shadow-xs">
           <h2 className="text-lg font-bold text-slate-800 tracking-wide">Targets & Deployment Configuration</h2>
           <div className="flex items-center space-x-4">
-            <Link
-              href="/status"
-              className="text-xs font-semibold text-amber-650 hover:text-amber-700 transition-colors"
-            >
-              API Status
-            </Link>
           </div>
         </header>
 

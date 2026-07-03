@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { RefreshCw, ChevronRight, ArrowLeft, CheckCircle, XCircle, Code, User, Calendar, BookOpen, Clock, Lock, Unlock } from 'lucide-react';
 import DapCodeEditor from '@/components/DapCodeEditor';
 import { KcInfo, getKcDisplayName } from '@/lib/kc-utils';
+import { Skeleton, SkeletonCardGrid } from '@/components/Skeleton';
 
 interface Homework {
   id: string;
@@ -157,9 +158,12 @@ export default function SubmissionsPage() {
 
   if (loading) {
     return (
-      <div className="py-24 flex flex-col justify-center items-center gap-3">
-        <div className="h-8 w-8 animate-spin rounded-full border-3 border-indigo-600 border-t-transparent"></div>
-        <p className="text-xs text-slate-500 font-bold">Loading submissions data...</p>
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Skeleton className="h-6 w-72" />
+          <Skeleton className="h-2.5 w-96 max-w-full" />
+        </div>
+        <SkeletonCardGrid cards={4} />
       </div>
     );
   }

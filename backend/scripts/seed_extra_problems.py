@@ -24,6 +24,10 @@ EXTRA_PROBLEMS = {
         "test_cases": [
             {"input": "32.0\n", "expected": "0.0"},
             {"input": "212.0\n", "expected": "100.0"}
+        ],
+        "reference_solutions": [
+            "program TempConverter\ndictionary\n    const scale = 1.8\n    const offset = 32.0\n    f, c : real\nalgorithm\n    read f\n    c <- (f - offset) / scale\n    write c\nendprogram",
+            "program TempConverter\ndictionary\n    const scale = 1.8\n    const offset = 32.0\n    f, c : real\nalgorithm\n    read f\n    c <- (f - 32.0) / 1.8\n    write c\nendprogram"
         ]
     },
     "tax-calculator-const": {
@@ -35,6 +39,10 @@ EXTRA_PROBLEMS = {
         "test_cases": [
             {"input": "100.0\n", "expected": "15.0"},
             {"input": "250.0\n", "expected": "37.5"}
+        ],
+        "reference_solutions": [
+            "program TaxCalculator\ndictionary\n    const tax_rate = 0.15\n    total, tax : real\nalgorithm\n    read total\n    tax <- total * tax_rate\n    write tax\nendprogram",
+            "program TaxCalculator\ndictionary\n    const tax_rate = 0.15\n    total, tax : real\nalgorithm\n    read total\n    tax <- total * 0.15\n    write tax\nendprogram"
         ]
     },
     # VA (Variables)
@@ -47,6 +55,10 @@ EXTRA_PROBLEMS = {
         "test_cases": [
             {"input": "1\n2\n3\n", "expected": "6"},
             {"input": "-1\n5\n10\n", "expected": "14"}
+        ],
+        "reference_solutions": [
+            "program SimpleAccumulator\ndictionary\n    a, b, c, sum : integer\nalgorithm\n    read a\n    read b\n    read c\n    sum <- a + b + c\n    write sum\nendprogram",
+            "program SimpleAccumulator\ndictionary\n    a, b, c, sum : integer\nalgorithm\n    read a\n    read b\n    read c\n    sum <- 0\n    sum <- sum + a\n    sum <- sum + b\n    sum <- sum + c\n    write sum\nendprogram"
         ]
     },
     "variable-assign": {
@@ -58,6 +70,10 @@ EXTRA_PROBLEMS = {
         "test_cases": [
             {"input": "5\n", "expected": "15"},
             {"input": "0\n", "expected": "5"}
+        ],
+        "reference_solutions": [
+            "program VariableAssign\ndictionary\n    x, val : integer\nalgorithm\n    read x\n    val <- x * 2\n    val <- val + 5\n    write val\nendprogram",
+            "program VariableAssign\ndictionary\n    x, val : integer\nalgorithm\n    read x\n    val <- (x * 2) + 5\n    write val\nendprogram"
         ]
     },
     # OP (Operators)
@@ -70,6 +86,10 @@ EXTRA_PROBLEMS = {
         "test_cases": [
             {"input": "10\n3\n", "expected": "1"},
             {"input": "25\n5\n", "expected": "0"}
+        ],
+        "reference_solutions": [
+            "program RemainderCalc\ndictionary\n    a, b, rem : integer\nalgorithm\n    read a\n    read b\n    rem <- a % b\n    write rem\nendprogram",
+            "program RemainderCalc\ndictionary\n    a, b, rem : integer\nalgorithm\n    read a\n    read b\n    rem <- a - (a / b) * b\n    write rem\nendprogram"
         ]
     },
     "arithmetic-mix": {
@@ -81,6 +101,10 @@ EXTRA_PROBLEMS = {
         "test_cases": [
             {"input": "5\n3\n", "expected": "16"},
             {"input": "2\n2\n", "expected": "0"}
+        ],
+        "reference_solutions": [
+            "program ArithmeticMix\ndictionary\n    a, b, result : integer\nalgorithm\n    read a\n    read b\n    result <- (a + b) * (a - b)\n    write result\nendprogram",
+            "program ArithmeticMix\ndictionary\n    a, b, result : integer\nalgorithm\n    read a\n    read b\n    result <- a * a - b * b\n    write result\nendprogram"
         ]
     },
     # EX (Expressions)
@@ -93,6 +117,10 @@ EXTRA_PROBLEMS = {
         "test_cases": [
             {"input": "2\n", "expected": "20"},
             {"input": "-2\n", "expected": "0"}
+        ],
+        "reference_solutions": [
+            "program LinearEval\ndictionary\n    x, y : integer\nalgorithm\n    read x\n    y <- 5 * x + 10\n    write y\nendprogram",
+            "program LinearEval\ndictionary\n    x, y : integer\nalgorithm\n    read x\n    y <- 10 + 5 * x\n    write y\nendprogram"
         ]
     },
     "volume-box": {
@@ -104,6 +132,10 @@ EXTRA_PROBLEMS = {
         "test_cases": [
             {"input": "3\n4\n5\n", "expected": "60"},
             {"input": "10\n10\n10\n", "expected": "1000"}
+        ],
+        "reference_solutions": [
+            "program VolumeBox\ndictionary\n    length, width, height, vol : integer\nalgorithm\n    read length\n    read width\n    read height\n    vol <- length * width * height\n    write vol\nendprogram",
+            "program VolumeBox\ndictionary\n    length, width, height, vol : integer\nalgorithm\n    read length\n    read width\n    read height\n    vol <- (length * width) * height\n    write vol\nendprogram"
         ]
     },
     # IO (Input/Output)
@@ -116,6 +148,9 @@ EXTRA_PROBLEMS = {
         "test_cases": [
             {"input": "Hello\n", "expected": "Hello"},
             {"input": "Testing\n", "expected": "Testing"}
+        ],
+        "reference_solutions": [
+            "program EchoMessage\ndictionary\n    msg : string\nalgorithm\n    read msg\n    write msg\nendprogram"
         ]
     },
     "double-io": {
@@ -126,6 +161,9 @@ EXTRA_PROBLEMS = {
         "starter_code": "program DoubleIO\ndictionary\n    x : integer\nalgorithm\n    read x\n    write x\nendprogram",
         "test_cases": [
             {"input": "42\n", "expected": "42"}
+        ],
+        "reference_solutions": [
+            "program DoubleIO\ndictionary\n    x : integer\nalgorithm\n    read x\n    write x\nendprogram"
         ]
     },
     # CD (Conditionals)
@@ -139,6 +177,10 @@ EXTRA_PROBLEMS = {
             {"input": "5\n", "expected": "1"},
             {"input": "-10\n", "expected": "-1"},
             {"input": "0\n", "expected": "0"}
+        ],
+        "reference_solutions": [
+            "program SignChecker\ndictionary\n    x, res : integer\nalgorithm\n    read x\n    if x > 0 then\n        res <- 1\n    elif x < 0 then\n        res <- -1\n    else\n        res <- 0\n    endif\n    write res\nendprogram",
+            "program SignChecker\ndictionary\n    x, res : integer\nalgorithm\n    read x\n    if x > 0 then\n        res <- 1\n    else\n        if x < 0 then\n            res <- -1\n        else\n            res <- 0\n        endif\n    endif\n    write res\nendprogram"
         ]
     },
     "grade-classifier": {
@@ -151,6 +193,10 @@ EXTRA_PROBLEMS = {
             {"input": "85\n", "expected": "A"},
             {"input": "70\n", "expected": "B"},
             {"input": "50\n", "expected": "C"}
+        ],
+        "reference_solutions": [
+            "program GradeClassifier\ndictionary\n    score : integer\n    grade : string\nalgorithm\n    read score\n    if score >= 80 then\n        grade <- \"A\"\n    elif score >= 60 then\n        grade <- \"B\"\n    else\n        grade <- \"C\"\n    endif\n    write grade\nendprogram",
+            "program GradeClassifier\ndictionary\n    score : integer\n    grade : string\nalgorithm\n    read score\n    if score >= 80 then\n        write \"A\"\n    elif score >= 60 then\n        write \"B\"\n    else\n        write \"C\"\n    endif\nendprogram"
         ]
     },
     # LO (Loops)
@@ -162,6 +208,10 @@ EXTRA_PROBLEMS = {
         "starter_code": "program CountUp\ndictionary\n    n, i : integer\nalgorithm\n    read n\n    i <- 1\n    while i <= n do\n        write i\n        i <- i + 1\n    endwhile\nendprogram",
         "test_cases": [
             {"input": "3\n", "expected": "1\n2\n3"}
+        ],
+        "reference_solutions": [
+            "program CountUp\ndictionary\n    n, i : integer\nalgorithm\n    read n\n    i <- 1\n    while i <= n do\n        write i\n        i <- i + 1\n    endwhile\nendprogram",
+            "program CountUp\ndictionary\n    n, i : integer\nalgorithm\n    read n\n    i <- 1\n    while i < n + 1 do\n        write i\n        i <- i + 1\n    endwhile\nendprogram"
         ]
     },
     "count-down": {
@@ -172,6 +222,10 @@ EXTRA_PROBLEMS = {
         "starter_code": "program CountDown\ndictionary\n    n : integer\nalgorithm\n    read n\n    while n >= 1 do\n        write n\n        n <- n - 1\n    endwhile\nendprogram",
         "test_cases": [
             {"input": "3\n", "expected": "3\n2\n1"}
+        ],
+        "reference_solutions": [
+            "program CountDown\ndictionary\n    n : integer\nalgorithm\n    read n\n    while n >= 1 do\n        write n\n        n <- n - 1\n    endwhile\nendprogram",
+            "program CountDown\ndictionary\n    n : integer\nalgorithm\n    read n\n    while n > 0 do\n        write n\n        n <- n - 1\n    endwhile\nendprogram"
         ]
     }
 }
@@ -187,6 +241,23 @@ EXISTING_PROBLEMS_KCS = {
     "max-three": "CD",
     "sum-n": "LO,VA",
     "sum-evens": "CD,LO,EX"
+}
+
+EXTRA_HIDDEN_TEST_CASES = {
+    "temp-converter-const": {"input": "50.0\n", "expected": "10.0", "hidden": True},
+    "tax-calculator-const": {"input": "200.0\n", "expected": "30.0", "hidden": True},
+    "simple-accumulator": {"input": "5\n5\n5\n", "expected": "15", "hidden": True},
+    "variable-assign": {"input": "10\n", "expected": "25", "hidden": True},
+    "remainder-calc": {"input": "15\n4\n", "expected": "3", "hidden": True},
+    "arithmetic-mix": {"input": "4\n2\n", "expected": "12", "hidden": True},
+    "linear-eval": {"input": "4\n", "expected": "30", "hidden": True},
+    "volume-box": {"input": "2\n3\n4\n", "expected": "24", "hidden": True},
+    "echo-message": {"input": "HelloHidden\n", "expected": "HelloHidden", "hidden": True},
+    "double-io": {"input": "100\n", "expected": "100", "hidden": True},
+    "sign-checker": {"input": "-5\n", "expected": "-1", "hidden": True},
+    "grade-classifier": {"input": "90\n", "expected": "A", "hidden": True},
+    "count-up": {"input": "4\n", "expected": "1\n2\n3\n4", "hidden": True},
+    "count-down": {"input": "4\n", "expected": "4\n3\n2\n1", "hidden": True}
 }
 
 db_url = settings.DATABASE_URL
@@ -207,13 +278,26 @@ async def main():
                 prob.kc_tags = tags
                 print(f"Updated {key} with tags: {tags}")
 
+        from app.core.misconception import generate_ast_json
+        from app.core.references import upload_reference_file
+        from app.core.storage import init_storage
+        import anyio
+
+        # Ensure MinIO bucket is created
+        await anyio.to_thread.run_sync(init_storage)
+
         print("\nSeeding extra problems...")
         for key, p_data in EXTRA_PROBLEMS.items():
             stmt = select(Problem).where(Problem.key == key)
             res = await session.execute(stmt)
             prob = res.scalar_one_or_none()
+
+            test_cases = list(p_data["test_cases"])
+            if key in EXTRA_HIDDEN_TEST_CASES:
+                test_cases.append(EXTRA_HIDDEN_TEST_CASES[key])
+
             if not prob:
-                new_prob = Problem(
+                db_prob = Problem(
                     id=uuid.uuid4(),
                     key=key,
                     title=p_data["title"],
@@ -221,9 +305,9 @@ async def main():
                     description_en=p_data["description_en"],
                     description_id=p_data["description_id"],
                     starter_code=p_data["starter_code"],
-                    test_cases=p_data["test_cases"]
+                    test_cases=test_cases
                 )
-                session.add(new_prob)
+                session.add(db_prob)
                 print(f"Created extra problem: {key}")
             else:
                 prob.kc_tags = p_data["kc_tags"]
@@ -231,8 +315,20 @@ async def main():
                 prob.description_en = p_data["description_en"]
                 prob.description_id = p_data["description_id"]
                 prob.starter_code = p_data["starter_code"]
-                prob.test_cases = p_data["test_cases"]
+                prob.test_cases = test_cases
+                db_prob = prob
                 print(f"Updated extra problem: {key}")
+
+            # Upload reference solutions to MinIO
+            if "reference_solutions" in p_data:
+                for idx, ref_content in enumerate(p_data["reference_solutions"], start=1):
+                    filename = f"reference_{idx}.dap"
+                    ref_ast = await generate_ast_json(ref_content)
+                    if ref_ast is None:
+                        print(f"WARNING: Reference solution {idx} for {key} failed to compile!")
+                        continue
+                    await upload_reference_file(db_prob, filename, ref_content, ref_ast)
+                    print(f"Uploaded reference solution {filename} for {key} to MinIO")
 
         await session.commit()
         print("\nExtra problems seeding completed successfully!")

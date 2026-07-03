@@ -1,0 +1,16 @@
+program MaxThreeSequential
+dictionary
+    a, b, c, max_val : integer
+algorithm
+    read a
+    read b
+    read c
+    max_val <- a
+    if b > max_val then
+        max_val <- b
+    endif
+    if c > max_val then
+        max_val <- c
+    endif
+    write max_val
+endprogram

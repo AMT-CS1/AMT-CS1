@@ -1,0 +1,12 @@
+program SwapVariablesArithmetic
+dictionary
+    x, y : integer
+algorithm
+    read x
+    read y
+    x <- x + y
+    y <- x - y
+    x <- x - y
+    write x
+    write y
+endprogram

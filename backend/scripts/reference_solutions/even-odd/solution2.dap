@@ -1,0 +1,8 @@
+program EvenOddCheckerModulo
+dictionary
+    n, result : integer
+algorithm
+    read n
+    result <- (n + 1) % 2
+    write result
+endprogram

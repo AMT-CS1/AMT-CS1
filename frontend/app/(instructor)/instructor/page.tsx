@@ -12,7 +12,7 @@ export default function InstructorPage() {
       </div>
 
       {/* Homework Management */}
-      <HomeworkManager />
+      <HomeworkManager kind="homework" />
     </div>
   );
 }

@@ -17,4 +17,7 @@ class WeeklyTarget(Base):
     description: Mapped[str] = mapped_column(Text, nullable=True)
     deadline: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     randomize_problems: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="homework") # homework | lab
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True) # labs: locked until this time
+    access_password: Mapped[str | None] = mapped_column(String(100), nullable=True) # labs: in-class password
 

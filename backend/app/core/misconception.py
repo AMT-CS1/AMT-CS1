@@ -61,6 +61,22 @@ async def generate_ast_json(code: str, timeout: float = 5.0) -> dict | None:
     return await anyio.to_thread.run_sync(_generate_ast_json_sync, code, timeout)
 
 
+def detect_misconceptions_best(student_ast: dict, reference_asts: list[dict]) -> list[dict] | None:
+    """
+    Diffs the student AST against every candidate reference AST and returns the
+    misconceptions from the closest reference (fewest logic differences).
+    Returns None when there are no candidate references.
+    """
+    best: list[dict] | None = None
+    for reference_ast in reference_asts:
+        detected = detect_misconceptions(student_ast, reference_ast)
+        if best is None or len(detected) < len(best):
+            best = detected
+        if best == []:
+            break  # structurally identical to a reference; can't get closer
+    return best
+
+
 def detect_misconceptions(student_ast: dict, reference_ast: dict) -> list[dict]:
     """
     Diffs the student's AST against the reference-solution AST and returns a
@@ -87,19 +103,11 @@ def detect_misconceptions(student_ast: dict, reference_ast: dict) -> list[dict]:
                     "detail": log.get("detail", ""),
                     "buggy_expr": log.get("buggy_expr", ""),
                 }
-            else:
-                entry = {
-                    "code": "GEN",
-                    "title": "Logic difference",
-                    "description": "Your code's logic differs from the expected approach here.",
-                    "detail": log.get("detail", ""),
-                    "buggy_expr": log.get("buggy_expr", ""),
-                }
-            dedupe_key = f"{entry['code']}|{entry['detail']}"
-            if dedupe_key in seen_codes:
-                continue
-            seen_codes.add(dedupe_key)
-            results.append(entry)
+                dedupe_key = f"{entry['code']}|{entry['detail']}"
+                if dedupe_key in seen_codes:
+                    continue
+                seen_codes.add(dedupe_key)
+                results.append(entry)
         return results
     except Exception as e:
         logger.warning("Misconception detection failed: %s", e)
