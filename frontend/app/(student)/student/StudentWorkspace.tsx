@@ -6,7 +6,8 @@ import {
   Sparkles, Play, Code2, CheckCircle2, XCircle,
   AlertCircle, RefreshCw, ChevronRight, ArrowLeft,
   Lock, Unlock, Calendar, Award, BookOpen, Clock,
-  Shuffle, ThumbsUp, ThumbsDown, FlaskConical, KeyRound
+  Shuffle, ThumbsUp, ThumbsDown, FlaskConical, KeyRound,
+  Mic, Square, Send, BrainCircuit
 } from 'lucide-react';
 import DapCodeEditor from '@/components/DapCodeEditor';
 import ProblemMarkdown from '@/components/ProblemMarkdown';
@@ -168,6 +169,19 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
   const [quizFeedback, setQuizFeedback] = useState<{ id: string; text: string } | null>(null);
   const [quizFeedbackRating, setQuizFeedbackRating] = useState<number | null>(null);
 
+  // Understanding Confirmation States (shown after a correct probe answer)
+  const [inConfirmation, setInConfirmation] = useState(false);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [confirmQuestion, setConfirmQuestion] = useState<{ en: string; id: string } | null>(null);
+  const [confirmInput, setConfirmInput] = useState('');
+  const [confirmJudging, setConfirmJudging] = useState(false);
+  const [confirmResult, setConfirmResult] = useState<
+    { score: number; passed: boolean; threshold: number; feedback_en: string; feedback_id: string } | null
+  >(null);
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
   // Time-window (lab locks, deadlines) and automated-grade states
   const [nowTick, setNowTick] = useState<number>(() => Date.now());
   const [grades, setGrades] = useState<Record<string, TargetGrade>>({});
@@ -237,6 +251,12 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
 
   useEffect(() => {
     setIsMounted(true);
+    // Detect browser speech-to-text support for the optional microphone input.
+    if (typeof window !== 'undefined') {
+      setSpeechSupported(
+        !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+      );
+    }
     const saved = localStorage.getItem('amt_split_ratio');
     if (saved) {
       const v = parseFloat(saved);
@@ -441,53 +461,204 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
       }
     }
 
-    // Proactively notify backend of quiz completion if final question is correct
-    if (quizIndex === 2 && correct && selectedTarget) {
-      const taskRef = currentProblem.key;
+    // A correct answer no longer advances immediately: we first ask the student
+    // to justify their reasoning and verify genuine understanding via the LLM.
+    if (correct) {
+      const optList = descLang === 'id' ? currentQuestion.options_id : currentQuestion.options_en;
+      const studentAnsText = currentQuestion.type === 'mc'
+        ? (optList?.[selectedOption.charCodeAt(0) - 65] ?? selectedOption)
+        : shortAnswer;
+      await startConfirmation(currentQuestion, studentAnsText);
+    }
+  };
 
+  // Kick off the reflective "why/how" confirmation step for a correct answer.
+  const startConfirmation = async (question: QuizQuestion, studentAnsText: string) => {
+    if (!currentProblem) return;
+    setInConfirmation(true);
+    setConfirmLoading(true);
+    setConfirmQuestion(null);
+    setConfirmResult(null);
+    setConfirmInput('');
+
+    const questionText = descLang === 'id' ? question.text_id : question.text_en;
+    try {
+      const res = await fetch('/api/exercises', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          _action: 'confirm_generate',
+          problem_key: currentProblem.key,
+          kc_focus: selectedTarget?.topic_kc_focus,
+          question_text: questionText,
+          student_answer: studentAnsText,
+          lang: descLang,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to generate confirmation question');
+      const data = await res.json();
+      setConfirmQuestion({ en: data.question_en, id: data.question_id || data.question_en });
+    } catch (err) {
+      console.error('Failed to generate confirmation question:', err);
+      setConfirmQuestion({
+        en: 'Correct! In your own words, why is that the right answer? Walk me through your reasoning.',
+        id: 'Benar! Dengan kata-katamu sendiri, mengapa itu jawaban yang tepat? Jelaskan alasanmu.',
+      });
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+
+  const handleSubmitConfirmation = async () => {
+    const question = quizQuestions[quizIndex];
+    if (!confirmQuestion || !currentProblem || !question || !confirmInput.trim()) return;
+    stopListening();
+    setConfirmJudging(true);
+
+    const questionText = descLang === 'id' ? question.text_id : question.text_en;
+    const studentAns = question.type === 'mc' ? selectedOption : shortAnswer;
+    const confirmQ = descLang === 'id' ? confirmQuestion.id : confirmQuestion.en;
+
+    try {
+      const res = await fetch('/api/exercises', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          _action: 'confirm_judge',
+          problem_key: currentProblem.key,
+          kc_focus: selectedTarget?.topic_kc_focus,
+          question_text: questionText,
+          confirm_question: confirmQ,
+          student_answer: studentAns,
+          student_explanation: confirmInput,
+          lang: descLang,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to judge understanding');
+      const data = await res.json();
+      setConfirmResult(data);
+    } catch (err) {
+      console.error('Failed to judge understanding:', err);
+      // Degrade gracefully: let the student continue rather than trapping them.
+      setConfirmResult({
+        score: 0,
+        passed: false,
+        threshold: 70,
+        feedback_en: 'We could not evaluate your explanation right now. Let’s continue to the next question.',
+        feedback_id: 'Kami tidak dapat mengevaluasi penjelasanmu saat ini. Mari lanjut ke pertanyaan berikutnya.',
+      });
+    } finally {
+      setConfirmJudging(false);
+    }
+  };
+
+  const resetConfirmation = () => {
+    stopListening();
+    setInConfirmation(false);
+    setConfirmLoading(false);
+    setConfirmQuestion(null);
+    setConfirmInput('');
+    setConfirmJudging(false);
+    setConfirmResult(null);
+  };
+
+  // Browser speech-to-text (optional). Client-only, no audio leaves the device
+  // until the transcribed text is submitted like a normal typed answer.
+  const startListening = () => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = descLang === 'id' ? 'id-ID' : 'en-US';
+      recognition.interimResults = false;
+      // Keep listening across pauses so students can speak a full explanation;
+      // they end the recording themselves via the icon.
+      recognition.continuous = true;
+      recognition.onresult = (event: any) => {
+        // Append only the newly finalized segments (from resultIndex onward) so
+        // continuous mode doesn't re-add earlier sentences.
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            transcript += event.results[i][0].transcript;
+          }
+        }
+        transcript = transcript.trim();
+        if (transcript) {
+          setConfirmInput(prev => (prev ? prev.trim() + ' ' : '') + transcript);
+        }
+      };
+      recognition.onend = () => setIsListening(false);
+      recognition.onerror = () => setIsListening(false);
+      recognitionRef.current = recognition;
+      setIsListening(true);
+      recognition.start();
+    } catch (err) {
+      console.error('Speech recognition failed to start:', err);
+      setIsListening(false);
+    }
+  };
+
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch { /* no-op */ }
+    }
+    setIsListening(false);
+  };
+
+  // Single mic control that walks through record -> (auto) transcribe -> submit:
+  //  - while listening: clicking stops the recording (which finalizes the text)
+  //  - once there is transcribed/typed text: the icon becomes a submit action
+  //  - otherwise: clicking starts a new recording
+  const handleMicButtonClick = () => {
+    if (isListening) {
+      stopListening();
+    } else if (confirmInput.trim()) {
+      handleSubmitConfirmation();
+    } else {
+      startListening();
+    }
+  };
+
+  const finishQuiz = async () => {
+    if (selectedTarget && currentProblem) {
+      const taskRef = currentProblem.key;
       try {
         await fetch('/api/exercises', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             _action: 'complete',
             problem_key: taskRef,
-            questions_answered: 3
-          })
-        });
-        setQuizFinishedKeys(prev => {
-          if (prev.includes(taskRef)) return prev;
-          return [...prev, taskRef];
+            questions_answered: 3,
+          }),
         });
       } catch (e) {
-        console.error('Failed to notify backend of quiz completion in checkAnswer', e);
+        console.error('Failed to notify backend of quiz completion', e);
       }
+      setQuizFinishedKeys(prev => (prev.includes(taskRef) ? prev : [...prev, taskRef]));
     }
+    resetConfirmation();
+    setInHintQuiz(false);
+    setShowHintPrompt(false);
   };
 
   const handleNextQuestion = () => {
     setQuizFeedback(null);
     setQuizFeedbackRating(null);
+    resetConfirmation();
     if (quizIndex < 2) {
+      // Advance to the next probe, whether the previous one was answered
+      // correctly (and confirmed) or incorrectly.
       setQuizIndex(prev => prev + 1);
       setSelectedOption('');
       setShortAnswer('');
       setIsAnswered(false);
       setIsAnswerCorrect(false);
     } else {
-      // Completed all 3 exercises
-      if (selectedTarget && currentProblem) {
-        const taskRef = currentProblem.key;
-        setQuizFinishedKeys(prev => {
-          if (prev.includes(taskRef)) return prev;
-          return [...prev, taskRef];
-        });
-      }
-
-      setInHintQuiz(false);
-      setShowHintPrompt(false);
+      // Reached the final probe: mark the quiz complete and return to coding.
+      finishQuiz();
     }
   };
 
@@ -546,15 +717,6 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
 
     checkQuizStatus();
   }, [selectedTargetId, activeProblemIndex, problems]);
-
-  const handleRetryQuestion = () => {
-    setSelectedOption('');
-    setShortAnswer('');
-    setIsAnswered(false);
-    setIsAnswerCorrect(false);
-    setQuizFeedback(null);
-    setQuizFeedbackRating(null);
-  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -1099,7 +1261,8 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
           ))}
         </div>
 
-        {/* Question Card */}
+        {/* Question Card — hidden once the student answers correctly and moves to the understanding check */}
+        {!inConfirmation && (
         <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm space-y-6">
           <div className="space-y-2">
             <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Concept Check</span>
@@ -1230,7 +1393,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
                   )}
                   <div>
                     <h5 className={`font-bold ${isAnswerCorrect ? 'text-emerald-950' : 'text-rose-950'}`}>
-                      {isAnswerCorrect ? 'Correct!' : 'Incorrect, try again!'}
+                      {isAnswerCorrect ? 'Correct!' : 'Not quite — let’s keep moving.'}
                     </h5>
                     {/* On incorrect answers the Tutor Guidance box above shows the feedback */}
                     {isAnswerCorrect && (
@@ -1263,15 +1426,168 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
               ) : (
                 <button
                   type="button"
-                  onClick={handleRetryQuestion}
-                  className="border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold text-xs px-6 py-3 rounded-xl transition-all cursor-pointer"
+                  onClick={handleNextQuestion}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-6 py-3 rounded-xl transition-all hover:shadow-md cursor-pointer flex items-center gap-1"
                 >
-                  Try Again
+                  <span>{quizIndex === 2 ? 'Back to Coding' : 'Next Question'}</span>
+                  <ChevronRight className="h-4 w-4" />
                 </button>
               )}
             </div>
           </div>
         </div>
+        )}
+
+        {/* Understanding Confirmation Card — shown after a correct probe answer to verify genuine understanding */}
+        {inConfirmation && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm space-y-6">
+            <div className="flex items-center gap-2 text-emerald-700">
+              <CheckCircle2 className="h-5 w-5 shrink-0" />
+              <span className="text-xs font-bold">
+                {descLang === 'id' ? 'Jawaban benar — mari pastikan kamu benar-benar paham.' : "Correct answer — let's make sure it really clicked."}
+              </span>
+            </div>
+
+            {confirmLoading ? (
+              <div className="flex items-center gap-3 py-6 text-slate-500">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></div>
+                <span className="text-xs font-medium">
+                  {descLang === 'id' ? 'Menyiapkan pertanyaan pemahaman singkat…' : 'Preparing a quick understanding check…'}
+                </span>
+              </div>
+            ) : (
+              <>
+                {/* LLM-generated reflective question */}
+                <div className="space-y-2">
+                  <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <BrainCircuit className="h-3.5 w-3.5" />
+                    {descLang === 'id' ? 'Cek Pemahaman' : 'Understanding Check'}
+                  </span>
+                  <h3 className="text-sm font-extrabold text-slate-900 leading-relaxed">
+                    {descLang === 'id' ? confirmQuestion?.id : confirmQuestion?.en}
+                  </h3>
+                </div>
+
+                {!confirmResult ? (
+                  /* Explanation input (typed or spoken) */
+                  <div className="space-y-3">
+                    <div className="relative">
+                      <textarea
+                        value={confirmInput}
+                        onChange={(e) => setConfirmInput(e.target.value)}
+                        disabled={confirmJudging}
+                        rows={4}
+                        placeholder={isListening
+                          ? (descLang === 'id' ? 'Mendengarkan… ucapkan alasanmu' : 'Listening… speak your reasoning')
+                          : (descLang === 'id' ? 'Jelaskan alasanmu dengan kata-katamu sendiri…' : 'Explain your reasoning in your own words…')}
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 pr-12 text-xs focus:border-indigo-500 focus:outline-hidden leading-relaxed resize-none disabled:opacity-60"
+                      />
+                      {(speechSupported || confirmInput.trim()) && (
+                        <button
+                          type="button"
+                          onClick={handleMicButtonClick}
+                          disabled={confirmJudging}
+                          title={isListening
+                            ? (descLang === 'id' ? 'Hentikan & ubah ke teks' : 'Stop & convert to text')
+                            : confirmInput.trim()
+                              ? (descLang === 'id' ? 'Kirim jawaban' : 'Submit answer')
+                              : (descLang === 'id' ? 'Jawab dengan suara' : 'Answer with your voice')}
+                          aria-label={isListening
+                            ? 'Stop recording'
+                            : confirmInput.trim()
+                              ? 'Submit answer'
+                              : 'Record answer'}
+                          className={`absolute right-2.5 bottom-2.5 flex h-8 w-8 items-center justify-center rounded-lg border transition-all disabled:opacity-50 ${isListening
+                            ? 'bg-rose-500 border-rose-500 text-white animate-pulse'
+                            : confirmInput.trim()
+                              ? 'bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700'
+                              : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-300'
+                            }`}
+                        >
+                          {isListening
+                            ? <Square className="h-3.5 w-3.5 fill-current" />
+                            : confirmInput.trim()
+                              ? <Send className="h-4 w-4" />
+                              : <Mic className="h-4 w-4" />}
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-[11px] text-slate-400 leading-relaxed">
+                        {isListening
+                          ? (descLang === 'id' ? 'Mendengarkan… bicara, lalu berhenti untuk mengubah ke teks.' : 'Listening… speak, then it converts to text.')
+                          : speechSupported
+                            ? (descLang === 'id' ? 'Ketik, atau ketuk mikrofon untuk berbicara — lalu ketuk ikon untuk mengirim.' : 'Type, or tap the mic to speak — then tap the icon to submit.')
+                            : (descLang === 'id' ? 'Ketik jawabanmu di bawah.' : 'Type your answer below.')}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={!confirmInput.trim() || confirmJudging}
+                        onClick={handleSubmitConfirmation}
+                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-6 py-3 rounded-xl transition-all hover:shadow-md cursor-pointer flex items-center gap-2 shrink-0"
+                      >
+                        {confirmJudging ? (
+                          <>
+                            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                            <span>{descLang === 'id' ? 'Menilai…' : 'Evaluating…'}</span>
+                          </>
+                        ) : (
+                          <span>{descLang === 'id' ? 'Kirim Penjelasan' : 'Submit Explanation'}</span>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Understanding score result */
+                  <div className="space-y-4">
+                    <div className={`p-4 rounded-xl border ${confirmResult.passed ? 'border-emerald-200 bg-emerald-50/50' : 'border-amber-200 bg-amber-50/50'}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-xs font-bold ${confirmResult.passed ? 'text-emerald-800' : 'text-amber-800'}`}>
+                          {confirmResult.passed
+                            ? (descLang === 'id' ? 'Pemahaman terkonfirmasi' : 'Understanding confirmed')
+                            : (descLang === 'id' ? 'Belum sepenuhnya paham' : 'Not quite there yet')}
+                        </span>
+                        <span className={`text-lg font-extrabold tabular-nums ${confirmResult.passed ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {confirmResult.score}%
+                        </span>
+                      </div>
+                      <div className="h-2 w-full rounded-full bg-white/70 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ease-out ${confirmResult.passed ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                          style={{ width: `${confirmResult.score}%` }}
+                        />
+                      </div>
+                      <p className="text-[11px] text-slate-600 mt-2.5 leading-relaxed">
+                        {descLang === 'id' ? confirmResult.feedback_id : confirmResult.feedback_en}
+                      </p>
+                    </div>
+                    {!confirmResult.passed && (
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        {descLang === 'id'
+                          ? `Penjelasanmu di bawah ${confirmResult.threshold}%, jadi kita lanjut ke ${quizIndex === 2 ? 'sesi coding' : 'pertanyaan berikutnya'}.`
+                          : `Your explanation scored below ${confirmResult.threshold}%, so we'll move on to ${quizIndex === 2 ? 'the coding section' : 'the next question'}.`}
+                      </p>
+                    )}
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleNextQuestion}
+                        className={`${confirmResult.passed ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'} text-white font-bold text-xs px-6 py-3 rounded-xl transition-all hover:shadow-md cursor-pointer flex items-center gap-1`}
+                      >
+                        <span>
+                          {quizIndex === 2
+                            ? (descLang === 'id' ? 'Kembali ke Coding' : 'Back to Coding')
+                            : (descLang === 'id' ? 'Pertanyaan Berikutnya' : 'Next Question')}
+                        </span>
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -1935,14 +2251,17 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
                   </div>
                 )}
 
-                {evalResult.test_results && evalResult.test_results.length > 0 && evalResult.test_results.filter((tc: any) => !tc.hidden).length > 0 && (
+                {evalResult.test_results && evalResult.test_results.length > 0 && (
                   <div className="space-y-3">
                     <h4 className="text-[11px] font-bold text-slate-700">Test Case Results</h4>
                     <div className="space-y-2.5">
-                      {evalResult.test_results.filter((tc: any) => !tc.hidden).map((tc: any) => (
+                      {evalResult.test_results.map((tc: any) => (
                         <div key={tc.test_case_index} className="rounded-xl border border-slate-150 p-3 space-y-2.5 bg-slate-50/50">
                           <div className="flex items-center justify-between text-[11px]">
-                            <span className="font-bold text-slate-700">Test Case #{tc.test_case_index}</span>
+                            <span className="font-bold text-slate-700 flex items-center gap-2">
+                              Test Case #{tc.test_case_index}
+                              {tc.hidden && <span className="text-[9px] font-normal text-slate-500 bg-slate-200 px-1.5 py-0.5 rounded-full">Hidden</span>}
+                            </span>
                             {tc.passed ? (
                               <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 flex items-center gap-1 text-[10px]">
                                 <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Pass
@@ -1961,7 +2280,9 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
                             </div>
                             <div className="space-y-1">
                               <span className="text-[9px] text-slate-400 font-sans block font-semibold">Expected Output</span>
-                              <div className="p-2 bg-white border border-slate-200 rounded-md text-slate-700 whitespace-pre">{tc.expected}</div>
+                              <div className="p-2 bg-white border border-slate-200 rounded-md text-slate-700 whitespace-pre">
+                                {tc.hidden ? <span className="italic text-slate-400">Hidden</span> : tc.expected}
+                              </div>
                             </div>
                             <div className="space-y-1">
                               <span className="text-[9px] text-slate-400 font-sans block font-semibold">Actual Output</span>

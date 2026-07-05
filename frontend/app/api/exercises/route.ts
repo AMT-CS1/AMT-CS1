@@ -34,6 +34,28 @@ export async function POST(request: Request) {
       return NextResponse.json(data);
     }
 
+    // Generate the reflective confirmation ("why/how") question after a correct answer
+    if (body._action === 'confirm_generate') {
+      const { _action, ...payload } = body;
+      const data = await apiFetch('exercises/confirm/generate', {
+        method: 'POST',
+        token,
+        body: JSON.stringify(payload),
+      });
+      return NextResponse.json(data);
+    }
+
+    // Judge whether the student's explanation demonstrates genuine understanding
+    if (body._action === 'confirm_judge') {
+      const { _action, ...payload } = body;
+      const data = await apiFetch('exercises/confirm/judge', {
+        method: 'POST',
+        token,
+        body: JSON.stringify(payload),
+      });
+      return NextResponse.json(data);
+    }
+
     // Check if this is a feedback rating request
     if (body._action === 'rate') {
       const { _action, feedback_id, rating } = body;
