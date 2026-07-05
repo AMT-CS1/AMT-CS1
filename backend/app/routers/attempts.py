@@ -3,6 +3,7 @@ import json
 import uuid
 import anyio
 import math
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from typing import List, Optional
@@ -13,7 +14,7 @@ from app.core.storage import get_s3_client
 from app.core.config import settings
 from app.core.dap_runner import evaluate_student_attempt, generate_feedback
 from app.core.misconception import generate_ast_json, detect_misconceptions_best
-from app.core.references import load_reference_asts, submission_prefix
+from app.core.references import load_reference_asts, submission_prefix, upload_reference_file
 from app.models.log import InteractionLog
 from app.models.attempt import Attempt
 from app.models.problem import Problem
@@ -23,6 +24,8 @@ from app.routers.targets import as_utc, now_utc
 from app.schemas.attempt import AttemptCreate, AttemptEvaluationResponse, AttemptResponse
 
 
+# Router buat semua hal soal "attempt" = submission jawaban siswa.
+# Endpoint intinya POST "" (submit + evaluasi + deteksi miskonsepsi + P/Q matrix).
 router = APIRouter(prefix="/attempts", tags=["attempts"])
 
 @router.get("", response_model=List[AttemptResponse])
@@ -32,9 +35,11 @@ async def list_attempts(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(RoleChecker(["instructor", "researcher"]))
 ):
-    """List all student attempts. Instructor-only endpoint."""
+    """Daftar semua attempt siswa (terbaru duluan). Khusus instruktur/peneliti.
+    Bisa disaring pakai user_id dan/atau task_ref."""
     stmt = select(Attempt).order_by(Attempt.timestamp.desc())
-    
+
+    # Rakit filter opsional; dua-duanya digabung pakai AND kalau sama-sama diisi.
     conditions = []
     if user_id:
         conditions.append(Attempt.user_id == uuid.UUID(user_id))
@@ -54,14 +59,15 @@ async def get_attempt_code(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(RoleChecker(["instructor", "researcher", "student"]))
 ):
-    """Retrieve the code content of a student attempt from MinIO."""
+    """Ambil isi kode dari satu attempt (disimpan di MinIO, bukan di Postgres).
+    Postgres cuma nyimpen pointer-nya (content_ref)."""
     stmt = select(Attempt).where(Attempt.id == id)
     res = await db.execute(stmt)
     attempt = res.scalar_one_or_none()
     if not attempt:
         raise HTTPException(status_code=404, detail="Attempt not found")
-        
-    # Check authorization: student can only view their own attempts
+
+    # Cek izin: siswa cuma boleh lihat kodenya sendiri (cegah IDOR).
     if current_user["role"] == "student" and str(attempt.user_id) != current_user["id"]:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -112,9 +118,13 @@ async def create_attempt(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(RoleChecker(["student"]))
 ):
+    # === ENDPOINT UTAMA fitur ini ===
+    # Alur besarnya: cek izin/waktu → evaluasi kode → compile AST → deteksi
+    # miskonsepsi → hitung P/Q matrix → simpan semuanya → balikin ke frontend.
+    # Baca docs/fitur-misconception-pq-matrix.md buat gambaran lengkapnya.
     user_id = uuid.UUID(current_user["id"])
 
-    # Time-window and lab-password enforcement for the owning target
+    # Cek jendela waktu + password lab buat target (tugas/sesi) yang punya soal ini.
     db_target = None
     if attempt.target_id is not None:
         target_res = await db.execute(select(WeeklyTarget).where(WeeklyTarget.id == attempt.target_id))
@@ -151,7 +161,7 @@ async def create_attempt(
                 detail="You have an active Intermediate Exercise quiz in progress. You must complete it before submitting homework attempts."
             )
 
-    # 1. Retrieve the problem from the database
+    # 1. Ambil data soal dari DB (bisa None kalau task_ref-nya gak kedaftar).
     problem_stmt = select(Problem).where(Problem.key == attempt.task_ref)
     problem_res = await db.execute(problem_stmt)
     db_problem = problem_res.scalars().first()
@@ -167,11 +177,14 @@ async def create_attempt(
     else:
         content_ref = await upload_code_to_minio(attempt.content)
 
-    # Evaluate the code asynchronously against problems and test cases using DAP runner
+    # Evaluasi kode lawan test case pakai DAP runner. Hasilnya dict berisi:
+    # success (kompile jalan?), passed (semua test lulus?), compilation_error,
+    # dan test_results per test case.
     eval_result = await evaluate_student_attempt(db_problem or attempt.task_ref, attempt.content)
 
-    # 3. Compile the AST once and persist it to MinIO so later analyses
-    # (misconception detection, P-Matrix) never need to re-invoke the compiler.
+    # 3. Compile AST-nya SEKALI aja terus simpan ke MinIO — analisis
+    # selanjutnya (deteksi miskonsepsi, P-Matrix, review rater) tinggal baca
+    # hasilnya, gak perlu manggil compiler lagi.
     ast_ref = None
     student_ast = None
     if eval_result["success"]:
@@ -188,48 +201,65 @@ async def create_attempt(
                 content_type="application/json"
             )
 
+    # 4. Deteksi miskonsepsi: kumpulin dulu semua AST solusi referensi
+    # (kandidat pembanding), baru diff kalau jawabannya salah.
     misconceptions = None
     candidate_asts = []
     if student_ast is not None and db_problem is not None:
+        # Referensi dari MinIO: solusi resmi + submission siswa lain yang lulus.
         candidate_asts = [entry["ast"] for entry in await load_reference_asts(db_problem)]
 
         legacy_ast = db_problem.reference_ast
         if legacy_ast is None and db_problem.reference_solution:
-            # Lazily compile and cache the legacy reference AST on the problem row
+            # Soal lama cuma nyimpen kode referensinya doang — compile sekali
+            # di sini terus cache AST-nya di row problem biar gak diulang.
             legacy_ast = await generate_ast_json(db_problem.reference_solution)
             if legacy_ast is not None:
                 db_problem.reference_ast = legacy_ast
         if legacy_ast is not None:
             candidate_asts.append(legacy_ast)
 
+        # Diff-nya cuma jalan kalau jawabannya SALAH — jawaban benar gak
+        # perlu dicariin miskonsepsinya.
         if not eval_result["passed"] and candidate_asts:
             detected = detect_misconceptions_best(student_ast, candidate_asts)
             misconceptions = detected or None
 
-    # Compute QMatrix, PMatrix, and similarity check
+    # 5. Hitung Q-Matrix, P-Matrix, dan skor kemiripannya.
+    #    Q-Matrix = konsep apa aja yang DIWAJIBKAN soal (dari kc_tags).
+    #    P-Matrix = konsep apa aja yang BENERAN muncul di kode siswa.
     q_matrix = None
     p_matrix = None
     matrix_similar = None
     if db_problem is not None:
+        # Urutan slot vektornya tetap: CO, VA, OP, EX, IO, CD, LO.
         concepts = ["CO", "VA", "OP", "EX", "IO", "CD", "LO"]
         problem_kcs = [c.strip().upper() for c in db_problem.kc_tags.split(",") if c.strip()]
-        
+
+        # Bangun Q-Matrix dari tag KC yang nempel di soal.
         q_matrix = [0] * 7
         for i, concept in enumerate(concepts):
             if concept in problem_kcs:
                 q_matrix[i] = 1
-                
+
         p_matrix = q_matrix.copy()
         if not eval_result["success"]:
+            # Kodenya aja gagal compile — semua konsep wajib dianggap gagal.
             for i in range(len(p_matrix)):
                 if q_matrix[i] == 1:
                     p_matrix[i] = 0
         else:
             from app.DAP.build_pmatrix import get_pmatrix_from_ast
-            # Compute P-Matrix using the AST diff failures algorithm in build_pmatrix.py
-            p_matrix = get_pmatrix_from_ast(student_ast, candidate_asts, q_matrix)
-            
-            # If the student's code is missing required concepts, fail verification and report them
+            # Deteksi kehadiran konsep WAJIB pakai AST mentah (normalize=False):
+            # normalisasi nge-inline assignment sekali-pakai (misal
+            # `sum <- a + b + c` dilipat ke dalam `write`), jadi konsep VA-nya
+            # bisa "hilang". Kalau compile ulangnya gagal, fallback ke student_ast.
+            raw_student_ast = await generate_ast_json(attempt.content, normalize=False)
+            p_matrix = get_pmatrix_from_ast(raw_student_ast or student_ast, candidate_asts, q_matrix)
+
+            # Kalau ada konsep wajib yang gak muncul di kode siswa, submission
+            # dianggap gagal verifikasi dan konsep yang hilang dilaporin
+            # sebagai miskonsepsi "XX-MISSING".
             if p_matrix != q_matrix:
                 eval_result["passed"] = False
                 if misconceptions is None:
@@ -241,6 +271,8 @@ async def create_attempt(
                 for i in range(len(q_matrix)):
                     if q_matrix[i] == 1 and p_matrix[i] == 0:
                         mc = concepts[i]
+                        # Jangan dobel: kalau diff AST udah nemuin miskonsepsi
+                        # di konsep yang sama, gak usah ditambahin lagi.
                         if not any(m.get("code", "").startswith(mc) for m in misconceptions):
                             misconceptions.append({
                                 "code": f"{mc}-MISSING",
@@ -250,23 +282,29 @@ async def create_attempt(
                                 "buggy_expr": "Missing code"
                             })
                             
-            # If student failed some test cases and p_matrix still matches q_matrix,
-            # mark the main required concepts in QMatrix as 0
+            # Kasus lain: konsepnya lengkap semua TAPI test case-nya ada yang
+            # gagal — berarti pemakaian konsepnya masih salah, jadi semua
+            # konsep wajib tetep dinolkan di P-Matrix.
             elif not eval_result["passed"]:
                 for i in range(len(p_matrix)):
                     if q_matrix[i] == 1:
                         p_matrix[i] = 0
-                        
+
+        # Cosine similarity antara P dan Q: 1.0 = kode siswa nyentuh semua
+        # konsep yang diwajibkan. Ambangnya 0.70 buat flag matrix_similar.
         dot_product = sum(p * q for p, q in zip(p_matrix, q_matrix))
         norm_p = math.sqrt(sum(p * p for p in p_matrix))
         norm_q = math.sqrt(sum(q * q for q in q_matrix))
         if norm_p > 0 and norm_q > 0:
             similarity = dot_product / (norm_p * norm_q)
         else:
+            # Salah satu vektornya nol semua — cosine-nya gak kedefinisi,
+            # jadi cukup cek sama persis atau nggak.
             similarity = 1.0 if p_matrix == q_matrix else 0.0
         matrix_similar = (similarity >= 0.70)
 
-    # 5. Save attempt details in PostgreSQL
+    # 6. Simpan detail attempt ke Postgres. Kode & AST-nya sendiri ada di
+    # MinIO — di sini cuma pointer-nya (content_ref, ast_ref) + hasil analisis.
     db_attempt = Attempt(
         id=attempt_id,
         user_id=uuid.UUID(current_user["id"]),
@@ -281,9 +319,18 @@ async def create_attempt(
     )
     db.add(db_attempt)
 
+    # Submission yang lulus disimpan jadi solusi referensi baru — makin banyak
+    # variasi jawaban benar, makin adil deteksi miskonsepsi buat siswa berikutnya.
+    if eval_result["passed"] and db_problem is not None and student_ast is not None:
+        try:
+            ref_filename = f"student_{attempt_id.hex}.dap"
+            await upload_reference_file(db_problem, ref_filename, attempt.content, student_ast)
+        except Exception as e:
+            logging.getLogger(__name__).warning("Failed to save passing student submission as reference: %s", e)
+
     feedback = None
 
-    # Log submission event
+    # Catat event submission ke InteractionLog (buat jejak aktivitas/riset).
     submission_log = InteractionLog(
         actor=current_user["id"],
         event_type="submission",
@@ -295,7 +342,8 @@ async def create_attempt(
     )
     db.add(submission_log)
 
-    # Log detected misconceptions for research, referencing the attempt and AST
+    # Miskonsepsi yang kedeteksi juga dicatat ke InteractionLog buat keperluan
+    # riset (nanti di-review sama rater), lengkap dengan rujukan attempt & AST-nya.
     if misconceptions:
         misconception_log = InteractionLog(
             actor=current_user["id"],
@@ -321,7 +369,8 @@ async def create_attempt(
     await db.commit()
     await db.refresh(db_attempt)
 
-    # Map back to response model
+    # Balikin semua hasil ke frontend dalam satu paket: verdict evaluasi,
+    # miskonsepsi (buat "Logic Hints"), dan P/Q matrix + skor kemiripannya.
     return AttemptEvaluationResponse(
         attempt=db_attempt,
         success=eval_result["success"],

@@ -1,3 +1,23 @@
+"""
+Mesin diff & repair AST — otaknya deteksi miskonsepsi.
+
+Alur besarnya gini:
+1. Kode DAP di-compile jadi AST JSON (get_ast / misconception.generate_ast_json).
+2. AST dinormalisasi (normalize_ast): variabel sekali-pakai di-inline biar
+   beda gaya nulis gak dianggap beda logika.
+3. AST siswa di-diff lawan AST solusi referensi (diff_and_repair). Tiap
+   perbedaan dicatat, dan pola kesalahan yang dikenali dikasih label kode
+   miskonsepsi (misal OP-1, VA-7, CD-13).
+
+Kode miskonsepsi yang dipakai di file ini:
+- CO-1: nge-assign ke nilai literal (nganggep angka itu variabel)
+- CO-2: nge-reassign konstanta
+- VA-2: assignment kebalik (a <- b padahal harusnya b <- a)
+- VA-7: ketuker huruf besar-kecil nama variabel
+- OP-1: pakai assignment (<-) di kondisi, harusnya perbandingan (=)
+- CD-13: pakai `if` padahal butuh `while`
+- LO-10: pakai `while` padahal cukup `if`
+"""
 import copy
 import csv
 import functools
@@ -11,10 +31,11 @@ from typing import Any
 
 @functools.cache
 def get_dap_path() -> str | None:
-    """Finds the absolute path to the DAP compiler executable.
+    """Nyari lokasi executable compiler DAP.
 
-    Resolution order: DAP_PATH environment variable, ~/.dap/bin/dap.exe,
-    then a `dap` binary on PATH.
+    Urutan nyarinya: env var DAP_PATH dulu, terus ~/.dap/bin/dap.exe,
+    terakhir coba binary `dap` yang ada di PATH. Hasilnya di-cache
+    (functools.cache) biar gak nyari ulang tiap dipanggil.
     """
     env_path = os.environ.get("DAP_PATH")
     if env_path and Path(env_path).exists():
@@ -36,7 +57,7 @@ def get_dap_path() -> str | None:
 
 
 def count_var_references(node: Any, name: str) -> int:
-    """Recursively counts how many times the variable name is referenced."""
+    """Ngitung (secara rekursif) berapa kali satu nama variabel dipakai di subtree."""
     if not isinstance(node, dict):
         if isinstance(node, list):
             return sum(count_var_references(item, name) for item in node)
@@ -56,7 +77,8 @@ def count_var_references(node: Any, name: str) -> int:
 
 
 def collect_var_counts(node: Any, counts: dict[str, int] | None = None) -> dict[str, int]:
-    """Counts references of every variable name in one subtree walk."""
+    """Kayak count_var_references, tapi sekali jalan langsung ngitung SEMUA
+    variabel sekaligus — lebih hemat daripada nyusurin subtree berkali-kali."""
     if counts is None:
         counts = {}
     if isinstance(node, list):
@@ -79,7 +101,8 @@ def collect_var_counts(node: Any, counts: dict[str, int] | None = None) -> dict[
 
 
 def replace_var_reference(node: Any, name: str, replacement_value: dict[str, Any]) -> None:
-    """Recursively replaces VarAccessToken with replacement_value."""
+    """Ganti semua pemakaian variabel `name` (VarAccessToken) dengan nilai
+    penggantinya, langsung di tempat (in-place). Dipakai pas nge-inline variabel."""
     if not isinstance(node, dict):
         if isinstance(node, list):
             for idx, item in enumerate(node):
@@ -97,14 +120,21 @@ def replace_var_reference(node: Any, name: str, replacement_value: dict[str, Any
 
 
 def normalize_ast(node: Any) -> Any:
-    """Recursively normalizes the AST (e.g., inlining single-use variables)."""
+    """Normalisasi AST secara rekursif — kerjaan utamanya nge-inline variabel
+    yang cuma dipakai sekali.
+
+    Contoh: `x <- a + b` terus `write x` bakal dilipat jadi `write (a + b)`.
+    Tujuannya biar dua kode yang logikanya sama tapi gayanya beda (pakai
+    variabel perantara vs langsung) keliatan identik pas di-diff, jadi siswa
+    gak dicap salah cuma gara-gara beda gaya nulis.
+    """
     if not isinstance(node, dict):
         if isinstance(node, list):
             for item in node:
                 normalize_ast(item)
         return node
 
-    # First recursively normalize children
+    # Normalisasi anak-anaknya dulu, baru node ini sendiri.
     for k, v in list(node.items()):
         if k != "type":
             normalize_ast(v)
@@ -112,8 +142,9 @@ def normalize_ast(node: Any) -> Any:
     t = node.get("type")
     if t == "ListNode":
         program = node.get("program", [])
-        # One counting walk per statement (DictionaryNode declarations excluded),
-        # instead of re-walking all other statements for every assignment.
+        # Hitung pemakaian variabel sekali jalan per statement (deklarasi di
+        # DictionaryNode di-skip), biar gak perlu nyusurin ulang semua
+        # statement lain tiap ketemu assignment.
         counters: list[dict[str, int]] = []
         for stmt in program:
             if isinstance(stmt, dict) and stmt.get("type") != "DictionaryNode":
@@ -131,15 +162,18 @@ def normalize_ast(node: Any) -> Any:
             cur = counters[i]
             if isinstance(stmt, dict) and stmt.get("type") == "VarAssignNode":
                 var_name = stmt.get("name")
+                # ref_count = berapa kali variabel ini dipakai SETELAH baris ini
+                # (total dikurangi pemakaian sebelum & di baris ini sendiri).
                 ref_count = (
                     total.get(var_name, 0) - prev.get(var_name, 0) - cur.get(var_name, 0)
                 )
                 if ref_count == 1 and prev.get(var_name, 0) == 0:
-                    # Inline: replace the single later reference with the value
+                    # Kandidat inline: dipakai cuma sekali setelahnya dan belum
+                    # pernah disentuh sebelumnya. Ganti pemakaian itu dengan nilainya.
                     for j in range(i + 1, len(program)):
                         if counters[j].get(var_name, 0):
                             replace_var_reference(program[j], var_name, stmt.get("value"))
-                            # The target statement changed; refresh its counts
+                            # Statement targetnya berubah — hitung ulang counter-nya.
                             new_counts = collect_var_counts(program[j])
                             for name in set(counters[j]) | set(new_counts):
                                 total[name] = (
@@ -149,7 +183,7 @@ def normalize_ast(node: Any) -> Any:
                                 )
                             counters[j] = new_counts
                             break
-                    # Drop the declaration and its contribution to the totals
+                    # Buang assignment-nya dari program + kurangi sumbangannya ke total.
                     for name, cnt in cur.items():
                         total[name] = total.get(name, 0) - cnt
                     continue
@@ -162,11 +196,13 @@ def normalize_ast(node: Any) -> Any:
 
 
 def cleanup_dictionary_node(root_node: dict[str, Any]) -> None:
-    """Removes variables from the DictionaryNode that are never used in the algorithm."""
+    """Buang deklarasi variabel di DictionaryNode yang gak pernah dipakai di
+    bagian algorithm — biasanya sisa dari variabel yang udah ke-inline sama
+    normalize_ast. Konstanta (is_const) gak ikut dibuang."""
     if not isinstance(root_node, dict) or root_node.get("type") != "ListNode":
         return
-    
-    # Find DictionaryNode and other statements
+
+    # Pisahin DictionaryNode (deklarasi) dari statement algorithm lainnya.
     dict_node = None
     algo_nodes = []
     for stmt in root_node.get("program", []):
@@ -178,7 +214,7 @@ def cleanup_dictionary_node(root_node: dict[str, Any]) -> None:
     if not dict_node:
         return
         
-    # Count references of each declared variable in the algorithm nodes
+    # Hitung pemakaian tiap variabel yang dideklarasi; yang gak kepakai dibuang.
     variables = dict_node.get("variables", [])
     new_variables = []
     for var in variables:
@@ -194,11 +230,14 @@ _reference_ast_cache: dict[tuple[str, bool], dict[str, Any]] = {}
 
 
 def get_ast(filepath: str | Path, normalize: bool = True) -> dict[str, Any]:
-    """Executes the DAP compiler on the file and returns parsed JSON AST."""
+    """Jalanin compiler DAP ke sebuah file, terus balikin AST-nya (JSON yang
+    udah di-parse). File referensi (namanya diawali 'c_') hasilnya di-cache
+    biar gak compile ulang tiap kali dibandingin."""
     filepath_str = str(filepath)
     filename = Path(filepath_str).name
     cache_key = (filepath_str, normalize)
     if filename.startswith("c_") and cache_key in _reference_ast_cache:
+        # Balikin salinan (deepcopy) biar isi cache-nya gak ke-mutasi caller.
         return copy.deepcopy(_reference_ast_cache[cache_key])
 
     dap_bin = get_dap_path()
@@ -217,7 +256,7 @@ def get_ast(filepath: str | Path, normalize: bool = True) -> dict[str, Any]:
             f"Failed to generate AST for {filepath_str}. Error:\n{result.stderr}"
         )
 
-    # Extract only the JSON portion from the stdout
+    # Ambil bagian JSON-nya doang dari stdout compiler.
     stdout = result.stdout.strip()
     try:
         ast_data = json.loads(stdout)
@@ -237,7 +276,8 @@ def get_ast(filepath: str | Path, normalize: bool = True) -> dict[str, Any]:
 
 
 def ast_to_code(node, indent=""):
-    """Translates the AST node dictionary back into clean DAP code."""
+    """Nerjemahin node AST balik jadi kode DAP yang rapi. Dipakai buat
+    nampilin potongan kode di pesan miskonsepsi (buggy_expr/correct_expr)."""
     if not node:
         return ""
     t = node.get("type")
@@ -323,7 +363,8 @@ def ast_to_code(node, indent=""):
 
 
 def ast_to_full_dap(root_node, program_name="AutoRepaired"):
-    """Wraps AST statement nodes in a program block."""
+    """Bungkus statement-statement AST jadi satu program DAP utuh
+    (program ... dictionary ... algorithm ... endprogram)."""
     dict_node = None
     algo_nodes = []
 
@@ -346,7 +387,9 @@ def ast_to_full_dap(root_node, program_name="AutoRepaired"):
 
 
 def node_similarity(b_node, c_node, code_cache=None):
-    """Computes a structural similarity score between two AST nodes [0.0 to 1.0]."""
+    """Ngasih skor kemiripan struktur antara dua node AST, dari 0.0 (beda
+    total) sampai 1.0 (sama persis). Skor ini dipakai align_lists buat
+    masang-masangin statement siswa dengan statement referensi."""
     if not isinstance(b_node, dict) or not isinstance(c_node, dict):
         return 1.0 if b_node == c_node else 0.0
 
@@ -378,15 +421,17 @@ def node_similarity(b_node, c_node, code_cache=None):
 
 
 def align_lists(buggy_list, correct_list):
-    """Aligns buggy_list elements to correct_list elements in two greedy passes:
-    strong matches (>= 0.8) are claimed first, then weaker structural matches
-    (>= 0.3), so an unrelated statement cannot steal a good pairing.
-    Returns: (matches, unmatched_buggy, unmatched_correct)
+    """Masang-masangin statement di kode siswa (buggy_list) dengan statement
+    di solusi referensi (correct_list), pakai dua putaran greedy:
+    pasangan yang kuat (skor >= 0.8) diambil duluan, baru pasangan struktural
+    yang lebih lemah (>= 0.3). Urutan gini penting biar statement yang gak
+    nyambung gak "nyerobot" pasangan yang harusnya cocok.
+    Balikin: (matches, unmatched_buggy, unmatched_correct)
     """
     matched_b = set()
     matched_c = set()
     matches = []
-    # Cache of stringified expression nodes; valid while both lists are alive.
+    # Cache hasil stringify node ekspresi; aman dipakai selama kedua list masih hidup.
     code_cache: dict[int, str] = {}
 
     for threshold in (0.8, 0.3):
@@ -414,7 +459,9 @@ def align_lists(buggy_list, correct_list):
 
 
 def get_dictionary_vars(root_node):
-    """Helper to extract variable and constant declarations from correct solution dictionary."""
+    """Helper buat ngambil deklarasi variabel & konstanta dari bagian
+    dictionary di solusi referensi. Dipakai buat ngecek misal siswa
+    nge-reassign konstanta (miskonsepsi CO-2)."""
     if not isinstance(root_node, dict) or root_node.get("type") != "ListNode":
         return {}
     for stmt in root_node.get("program", []):
@@ -424,27 +471,42 @@ def get_dictionary_vars(root_node):
 
 
 def diff_and_repair(buggy, correct, edit_logs=None, in_condition=False, reference_dictionary=None):
-    """Recursively diffs two JSON AST nodes and repairs buggy inplace to match correct."""
+    """Ini JANTUNG-nya deteksi miskonsepsi. Nge-diff dua AST secara rekursif,
+    terus "nge-repair" AST buggy di tempat (in-place) biar sama dengan correct.
+
+    Tiap perbaikan dicatat ke edit_logs; kalau pola kesalahannya cocok sama
+    miskonsepsi yang udah dikenal (CD-13, OP-1, VA-2, VA-7, CO-1, CO-2, dst),
+    entri log-nya dikasih label "misconception" — itu yang nanti dipetik
+    detect_misconceptions() buat ditampilin ke siswa.
+
+    Param penting:
+    - in_condition: True kalau lagi di dalam kondisi if/while — konteks ini
+      dipakai buat ngenalin miskonsepsi kayak OP-1 (nulis assignment di kondisi).
+    - reference_dictionary: daftar variabel/konstanta dari solusi referensi,
+      buat ngecek reassign konstanta (CO-2).
+    """
     if not isinstance(buggy, dict) or not isinstance(correct, dict):
         return False
 
     repaired = False
 
-    # Extract correct dictionary variable details at the root program level
+    # Di level root program, ambil dulu daftar variabel dari dictionary referensi.
     if reference_dictionary is None and correct.get("type") == "ListNode":
         reference_dictionary = get_dictionary_vars(correct)
 
-    # If structural types mismatch, replace buggy with copy of correct
+    # Tipe node-nya beda total? Ganti buggy dengan salinan dari correct.
     if buggy.get("type") != correct.get("type"):
         misconception_data = None
-        
-        # Check CD-13: Selection statements are iterative like loops
+
+        # Cek CD-13: siswa nganggep statement if bisa berulang kayak loop
+        # (nulis `if` padahal harusnya `while`).
         if buggy.get("type") == "IfNode" and correct.get("type") == "WhileNode":
             misconception_data = {
                 "code": "CD-13",
                 "title": "If Statement Used Instead of Loop",
                 "description": "Used an 'if' conditional branch where a repeating 'while' loop was required."
             }
+        # Kebalikannya (LO-10): nulis `while` padahal cukup `if` sekali jalan.
         elif buggy.get("type") == "WhileNode" and correct.get("type") == "IfNode":
             misconception_data = {
                 "code": "LO-10",
@@ -452,7 +514,8 @@ def diff_and_repair(buggy, correct, edit_logs=None, in_condition=False, referenc
                 "description": "Used a repeating 'while' loop where a single 'if' conditional branch was required."
             }
             
-        # Check OP-1: Using = (or assignment <-) instead of comparison (=) in condition
+        # Cek OP-1: nulis assignment (<-) di dalam kondisi, padahal
+        # maksudnya perbandingan (=).
         if in_condition and buggy.get("type") == "VarAssignNode":
             misconception_data = {
                 "code": "OP-1",
@@ -472,8 +535,9 @@ def diff_and_repair(buggy, correct, edit_logs=None, in_condition=False, referenc
             edit_logs.append(log_entry)
         for k in list(buggy.keys()):
             del buggy[k]
-        # Deep-copy so the repaired tree never aliases the correct AST's
-        # subtrees; later in-place edits must not rewrite the reference.
+        # Wajib deepcopy: pohon hasil repair gak boleh nunjuk (alias) ke
+        # subtree AST referensi — edit in-place berikutnya bisa gak sengaja
+        # ngubah referensinya kalau di-share.
         for k, v in correct.items():
             buggy[k] = copy.deepcopy(v)
         return True
@@ -485,6 +549,8 @@ def diff_and_repair(buggy, correct, edit_logs=None, in_condition=False, referenc
             old_op = buggy.get("operator")
             new_op = correct.get("operator")
             
+            # Operator beda di dalam kondisi + operatornya '<-' = kasus OP-1
+            # (ketuker antara assignment dan perbandingan).
             misconception_data = None
             if in_condition and old_op == "<-":
                 misconception_data = {
@@ -555,6 +621,8 @@ def diff_and_repair(buggy, correct, edit_logs=None, in_condition=False, referenc
             old_name = buggy.get("name")
             new_name = correct.get("name")
 
+            # Nama variabelnya sama kalau huruf besar-kecilnya diabaikan?
+            # Berarti siswa kejebak case-sensitivity (VA-7).
             misconception_data = None
             if old_name and new_name and old_name.lower() == new_name.lower():
                 misconception_data = {
@@ -582,7 +650,8 @@ def diff_and_repair(buggy, correct, edit_logs=None, in_condition=False, referenc
 
         misconception_data = None
 
-        # Check CO-1: Using a literal value as variable name
+        # Cek CO-1: nama variabelnya ternyata angka literal — siswa
+        # nge-assign ke nilai literal seolah-olah itu variabel.
         is_numeric = False
         try:
             float(b_name)
@@ -596,7 +665,8 @@ def diff_and_repair(buggy, correct, edit_logs=None, in_condition=False, referenc
                 "title": "Assigning to a Literal Value",
                 "description": f"Used a literal value '{b_name}' as if it were a variable assignment target."
             }
-        # Check CO-2: Confusing named constants with variables
+        # Cek CO-2: siswa nge-reassign sesuatu yang di referensi dideklarasi
+        # sebagai konstanta — ketuker antara konstanta dan variabel.
         elif reference_dictionary and b_name in reference_dictionary:
             var_def = reference_dictionary[b_name]
             if var_def.get("is_const", False):
@@ -607,7 +677,8 @@ def diff_and_repair(buggy, correct, edit_logs=None, in_condition=False, referenc
                 }
 
         if b_name != c_name:
-            # Check VA-2: Swapped assignment
+            # Cek VA-2: assignment-nya kebalik. Contoh: nulis `a <- b`
+            # padahal harusnya `b <- a` — kiri-kanannya persis ketuker.
             b_val = buggy.get("value", {})
             c_val = correct.get("value", {})
             if (isinstance(b_val, dict) and b_val.get("type") == "VarAccessToken" and
@@ -618,7 +689,7 @@ def diff_and_repair(buggy, correct, edit_logs=None, in_condition=False, referenc
                     "title": "Commutative Assignment Confusion",
                     "description": f"Assignment statement is reversed. Wrote '{b_name} <- {c_name}' instead of '{c_name} <- {b_name}'."
                 }
-            # Check VA-7: Case sensitivity
+            # Cek VA-7: cuma beda huruf besar-kecil doang.
             elif b_name and c_name and b_name.lower() == c_name.lower():
                 misconception_data = {
                     "code": "VA-7",
@@ -639,8 +710,8 @@ def diff_and_repair(buggy, correct, edit_logs=None, in_condition=False, referenc
             buggy["name"] = correct["name"]
             repaired = True
         elif misconception_data is not None and edit_logs is not None:
-            # Names match but the assignment itself embodies a misconception
-            # (e.g. reassigning a constant) — report it instead of discarding.
+            # Namanya sama, tapi assignment-nya sendiri udah salah kaprah
+            # (misal nge-reassign konstanta) — tetep dilaporin, jangan dibuang.
             edit_logs.append({
                 "type": "misconception",
                 "buggy_expr": ast_to_code(buggy),
@@ -698,22 +769,24 @@ def diff_and_repair(buggy, correct, edit_logs=None, in_condition=False, referenc
         )
 
     elif t == "ListNode":
+        # Level daftar statement: pasang-pasangkan dulu statement siswa vs
+        # referensi, baru diff yang berpasangan dan catat sisanya.
         b_list = buggy.get("program", [])
         c_list = correct.get("program", [])
         matches, unmatched_b, unmatched_c = align_lists(b_list, c_list)
-        
+
         repaired_flag = False
-        
-        # Diff/repair matched statements
+
+        # Diff/repair statement yang dapet pasangan.
         for b_idx, c_idx in matches:
             if diff_and_repair(b_list[b_idx], c_list[c_idx], edit_logs, in_condition, reference_dictionary):
                 repaired_flag = True
-                
-        # Check if there are any insertions or deletions
+
+        # Ada yang gak berpasangan = ada statement kelebihan/kurang.
         if unmatched_b or unmatched_c:
             repaired_flag = True
-            
-        # Log deletions (extra statements in buggy)
+
+        # Catat statement KELEBIHAN (ada di kode siswa, gak ada di referensi).
         for b_idx in unmatched_b:
             b_stmt = b_list[b_idx]
             if edit_logs is not None:
@@ -723,7 +796,7 @@ def diff_and_repair(buggy, correct, edit_logs=None, in_condition=False, referenc
                     "correct_expr": "",
                     "detail": f"Extra statement: found '{ast_to_code(b_stmt)}' which is not needed"
                 }
-                # An extra assignment targeting a declared constant is CO-2
+                # Statement kelebihan yang isinya nge-assign ke konstanta = CO-2.
                 if isinstance(b_stmt, dict) and b_stmt.get("type") == "VarAssignNode":
                     stmt_name = b_stmt.get("name")
                     if (reference_dictionary and stmt_name in reference_dictionary
@@ -735,7 +808,7 @@ def diff_and_repair(buggy, correct, edit_logs=None, in_condition=False, referenc
                         }
                 edit_logs.append(log_entry)
 
-        # Log insertions (missing statements from correct)
+        # Catat statement yang HILANG (ada di referensi, gak ada di kode siswa).
         for c_idx in unmatched_c:
             c_stmt = c_list[c_idx]
             if edit_logs is not None:
@@ -746,7 +819,7 @@ def diff_and_repair(buggy, correct, edit_logs=None, in_condition=False, referenc
                     "detail": f"Missing statement: expected to find '{ast_to_code(c_stmt)}'"
                 })
 
-        # Construct the final program block in the correct order
+        # Susun ulang program hasil repair ngikutin urutan referensi.
         new_program = []
         matched_map = {c_idx: b_list[b_idx] for b_idx, c_idx in matches}
         for c_idx, c_stmt in enumerate(c_list):
@@ -769,7 +842,7 @@ def diff_and_repair(buggy, correct, edit_logs=None, in_condition=False, referenc
 
 
 def get_challenge_id(filename: str) -> str:
-    """Extracts the challenge id from names like 'b_p1_student01.dap' -> 'p1'."""
+    """Ngambil id soal dari nama file. Contoh: 'b_p1_student01.dap' -> 'p1'."""
     parts = filename.split("_")
     if len(parts) > 1:
         return parts[1].replace(".dap", "")
@@ -777,27 +850,28 @@ def get_challenge_id(filename: str) -> str:
 
 
 def find_reference_files(buggy_filename: str, directory: str | Path) -> list[str]:
-    """Finds all corresponding correct reference solution files."""
+    """Nyari semua file solusi referensi (prefix 'c_') yang cocok buat satu soal."""
     challenge_id = get_challenge_id(buggy_filename)
 
     directory_path = Path(directory)
     references = []
     if directory_path.exists() and directory_path.is_dir():
         for f in directory_path.iterdir():
-            # Exact challenge-segment match, so 'p1' never matches 'p10'
+            # Cocokinnya harus persis per segmen id, biar 'p1' gak ikut kena 'p10'.
             if f.is_file() and f.name.startswith("c_") and get_challenge_id(f.name) == challenge_id:
                 references.append(str(f))
     return references
 
 
 def find_reference_file(buggy_filename: str, directory: str | Path) -> str | None:
-    """Finds the corresponding correct reference solution file (returns first match)."""
+    """Sama kayak find_reference_files, tapi cuma ngambil yang pertama ketemu."""
     refs = find_reference_files(buggy_filename, directory)
     return refs[0] if refs else None
 
 
 def execute_dap_with_input(filepath: str | Path, inputs: list[str]) -> tuple[str, str]:
-    """Executes a DAP file with standard inputs and returns stdout."""
+    """Jalanin file DAP dengan input dari stdin, balikin (stdout, stderr).
+    Ada timeout 3 detik biar program yang muter terus (infinite loop) gak ngegantung."""
     dap_bin = get_dap_path()
     if not dap_bin:
         return "", "DAP bin missing"
@@ -818,215 +892,4 @@ def execute_dap_with_input(filepath: str | Path, inputs: list[str]) -> tuple[str
         process.communicate()
         return "", "Timeout"
 
-
-# Test cases per exact challenge id. Add new challenges here.
-# NOTE: the c_l8_reference*.dap files currently implement rectangle
-# area/perimeter (p3's logic), so the l8 entry mirrors that behavior.
-# The original l8 spec (smallest number until -241231 is entered) was:
-#     {"input": ["10", "5", "8", "-241231"], "expected": "5"},
-#     {"input": ["-5", "-20", "-15", "-241231"], "expected": "-20"},
-#     {"input": ["-241231"], "expected": "NONE"}
-# Restore those cases if the l8 reference solutions are restored.
-CHALLENGE_TEST_CASES: dict[str, list[dict[str, Any]]] = {
-    "l8": [{"input": ["4 5"], "expected": "20\n18"}],
-    "p1": [
-        {"input": ["5"], "expected": "15"},
-        {"input": ["10"], "expected": "55"},
-        {"input": ["1"], "expected": "1"},
-    ],
-    "p2": [
-        {"input": ["5"], "expected": "1"},
-        {"input": ["-3"], "expected": "-1"},
-        {"input": ["0"], "expected": "0"},
-    ],
-    "p3": [
-        {"input": ["5 4"], "expected": "20\n18"},
-        {"input": ["10 10"], "expected": "100\n40"},
-    ],
-}
-
-
-def run_unit_tests(filepath, challenge_id):
-    """Runs the unit tests registered for the exact challenge ID."""
-    test_cases = CHALLENGE_TEST_CASES.get(challenge_id)
-    if test_cases is None:
-        return False, "Unknown challenge"
-
-    for case in test_cases:
-        output, err = execute_dap_with_input(filepath, case["input"])
-
-        lines = [l.strip() for l in output.split("\n") if l.strip()]
-        if "\n" in case["expected"]:
-            val = "\n".join(lines)
-        else:
-            val = lines[-1] if lines else ""
-
-        if val != case["expected"]:
-            return (
-                False,
-                f"Test failed for inputs {case['input']}. Expected {case['expected']}, got {val}",
-            )
-    return True, "All tests passed!"
-
-
-def repair_buggy_submissions(data_dir: str | Path) -> None:
-    """Reads P-Matrix, identifies buggy files, repairs them, and verifies with unit tests."""
-    data_path = Path(data_dir)
-    pmatrix_path = data_path / "P-matrix-out.CSV"
-    if not pmatrix_path.exists():
-        print(f"P-Matrix file not found at {pmatrix_path}")
-        return
-
-    # Read buggy files from P-matrix. Only b_ submissions are candidates:
-    # a 0 in the mastery vector cannot distinguish "concept failed" from
-    # "concept not required by this challenge", so reference (c_) files
-    # must never enter the repair pipeline.
-    buggy_files = []
-    with open(pmatrix_path, "r") as f:
-        reader = csv.reader(f)
-        for row in reader:
-            if not row:
-                continue
-            filename = row[0]
-            if filename.startswith("b_"):
-                buggy_files.append(filename)
-
-    for filename in buggy_files:
-        buggy_path = data_path / filename
-        if not buggy_path.exists():
-            continue
-
-        ref_paths = find_reference_files(filename, data_path)
-        if not ref_paths:
-            print(f"Could not find reference template for {filename}. Skipping.")
-            continue
-
-        print(f"\n[INFO] Starting repair for: {filename}")
-        print(f"[INFO] Found {len(ref_paths)} candidate reference template(s).")
-
-        # Parse the buggy AST once; each reference works on its own deepcopy.
-        try:
-            buggy_ast = get_ast(buggy_path)
-        except Exception as e:
-            print(f"[ERROR] Failed to parse {filename}: {e}")
-            continue
-
-        challenge_id = get_challenge_id(filename)
-        best_repair = None
-
-        for ref_path in ref_paths:
-            ref_path_obj = Path(ref_path)
-            print(f"[INFO] Trying reference: {ref_path_obj.name}")
-            try:
-                correct_ast = get_ast(ref_path_obj)
-
-                # In-place Repair on a copy of the buggy AST
-                edit_logs = []
-                buggy_ast_copy = copy.deepcopy(buggy_ast)
-                repaired = diff_and_repair(buggy_ast_copy, correct_ast, edit_logs)
-
-                repaired_code = ast_to_full_dap(
-                    buggy_ast_copy, program_name="Repaired_" + filename.replace(".dap", "")
-                )
-
-                # Write to temp repaired file to verify unit tests
-                temp_path = data_path / f"temp_repaired_{uuid.uuid4().hex}_{filename}"
-                try:
-                    with open(temp_path, "w") as f:
-                        f.write(repaired_code)
-                    passed_tests, test_msg = run_unit_tests(temp_path, challenge_id)
-                finally:
-                    try:
-                        temp_path.unlink(missing_ok=True)
-                    except OSError:
-                        pass
-
-                candidate = {
-                    "ref_path": ref_path_obj,
-                    "repaired": repaired,
-                    "repaired_code": repaired_code,
-                    "edit_logs": edit_logs,
-                    "passed_tests": passed_tests,
-                    "test_msg": test_msg
-                }
-
-                # Evaluate candidate quality
-                if best_repair is None:
-                    best_repair = candidate
-                else:
-                    if candidate["passed_tests"] and not best_repair["passed_tests"]:
-                        best_repair = candidate
-                    elif (candidate["passed_tests"] == best_repair["passed_tests"]) and (len(candidate["edit_logs"]) < len(best_repair["edit_logs"])):
-                        best_repair = candidate
-
-            except Exception as e:
-                print(f"[ERROR] Failed trying reference {ref_path_obj.name}: {e}")
-
-        if best_repair and best_repair["repaired"]:
-            best_ref_path = best_repair['ref_path']
-            print(f"[SUCCESS] Best reference chosen: {best_ref_path.name}")
-            corrected_path = data_path / ("repaired_" + filename)
-            with open(corrected_path, "w") as f:
-                f.write(best_repair["repaired_code"])
-            print(f"[SUCCESS] Repaired code written to: {corrected_path.name}")
-
-            # Print helpful hints for student learning
-            with open(buggy_path, "r") as f:
-                buggy_lines = f.readlines()
-
-            print("\n" + "=" * 60)
-            print("   AUTOMATED FEEDBACK - LOGIC HINTS FOR STUDENT")
-            print("=" * 60)
-            for log in best_repair["edit_logs"]:
-                buggy_expr = log["buggy_expr"]
-                correct_expr = log["correct_expr"]
-                detail = log["detail"]
-
-                # Search for the buggy expression in the student's original lines
-                line_num = None
-                norm_expr = (
-                    buggy_expr.lower()
-                    .replace(" ", "")
-                    .replace("(", "")
-                    .replace(")", "")
-                )
-                if norm_expr:
-                    for idx, line in enumerate(buggy_lines):
-                        norm_line = (
-                            line.lower()
-                            .replace(" ", "")
-                            .replace("(", "")
-                            .replace(")", "")
-                        )
-                        if norm_expr in norm_line:
-                            line_num = idx + 1
-                            break
-
-                if line_num:
-                    print(f"* [Line {line_num}]: {detail}")
-                    print(f"  -> Your code:       {buggy_lines[line_num - 1].strip()}")
-                    print(f"  -> Expected logic:  Contains '{correct_expr}'")
-                else:
-                    print(f"* [General Hint]: {detail}")
-                    print(f"  -> Original expression: '{buggy_expr}'")
-                    print(f"  -> Expected logic:      '{correct_expr}'")
-
-                if "misconception" in log:
-                    m = log["misconception"]
-                    print(f"  -> Cognitive Misconception: [{m['code']}] {m['title']}")
-                    print(f"     Description: {m['description']}")
-            print("=" * 60 + "\n")
-
-            if best_repair["passed_tests"]:
-                print(f"[VERIFIED] {corrected_path.name} passed all unit tests!")
-            else:
-                print(f"[FAILED VERIFICATION] {corrected_path.name}: {best_repair['test_msg']}")
-        else:
-            print(f"[INFO] No valid repair found for {filename}.")
-
-
-if __name__ == "__main__":
-    current_dir = Path(__file__).parent
-    data_dir = current_dir / "data"
-    repair_buggy_submissions(data_dir)
 

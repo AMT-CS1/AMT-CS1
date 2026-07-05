@@ -82,7 +82,7 @@ def test_practicum_and_homework_rules():
                     # 3. Student tries to submit code for locked homework -> should fail (403)
                     attempt_payload = {
                         "task_ref": problem_key,
-                        "content": "program Test\ndictionary\n    x : integer\nalgorithm\n    read x\n    write x\nendprogram",
+                        "content": "program Test\ndictionary\n    x, temp : integer\nalgorithm\n    read x\n    temp <- x\n    x <- temp\n    write x\nendprogram",
                         "source": "manual",
                         "target_id": hw_not_started["id"]
                     }

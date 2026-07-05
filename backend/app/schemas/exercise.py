@@ -51,3 +51,34 @@ class QuizFeedbackResponse(BaseModel):
 class QuizFeedbackRatingRequest(BaseModel):
     rating: int  # 1 or -1
 
+
+class ConfirmQuestionRequest(BaseModel):
+    problem_key: str
+    kc_focus: str | None = None
+    question_text: str
+    student_answer: str
+    lang: str | None = "en"
+
+
+class ConfirmQuestionResponse(BaseModel):
+    question_en: str
+    question_id: str
+
+
+class ConfirmJudgeRequest(BaseModel):
+    problem_key: str
+    kc_focus: str | None = None
+    question_text: str
+    confirm_question: str
+    student_answer: str
+    student_explanation: str
+    lang: str | None = "en"
+
+
+class ConfirmJudgeResponse(BaseModel):
+    score: int          # 0-100 percentage of demonstrated understanding
+    passed: bool        # score >= UNDERSTANDING_THRESHOLD
+    threshold: int      # the pass threshold used (so the UI can display it)
+    feedback_en: str
+    feedback_id: str
+

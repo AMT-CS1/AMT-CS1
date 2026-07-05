@@ -1,3 +1,18 @@
+"""
+Lapisan LLM buat fitur hint quiz / Misconception Probe.
+
+LLMProvider itu "kontrak" abstrak: siapapun providernya (DeepSeek beneran atau
+Dummy buat offline) harus punya method yang sama. Jadi kode pemanggil di
+routers/exercises.py gak peduli provider apa yang lagi dipakai.
+
+Tiga tugas utama providernya:
+1. generate_misconception_probe — bikin 3 soal kuis konsep buat siswa yang nyangkut.
+2. generate_confirmation_question — pertanyaan lanjutan "kenapa/gimana" habis
+   siswa jawab bener, buat mastiin dia paham beneran (bukan nebak hoki).
+3. judge_understanding — nilai (0-100) seberapa paham dari penjelasan siswa.
+
+Aturan emas di SEMUA prompt: jangan pernah bocorin jawaban benarnya.
+"""
 from abc import ABC, abstractmethod
 import urllib.request
 import urllib.error
@@ -11,7 +26,8 @@ from app.core.config import settings
 class LLMProvider(ABC):
     @abstractmethod
     async def generate(self, prompt: str, **kwargs) -> str:
-        """Generate response from the LLM provider."""
+        """Method inti: kirim prompt, dapetin teks balasan mentah dari LLM.
+        Method lain di kelas ini nyusun prompt terus manggil generate() ini."""
         pass
 
     async def generate_misconception_probe(
@@ -22,9 +38,11 @@ class LLMProvider(ABC):
         lang: str = "en",
     ) -> list[dict]:
         """
-        Generates exactly 3 conceptual exercises (Misconception Probe) for a given KC focus.
-        Integrates the DAP language prompt/specification to instruct the LLM properly.
+        Bikin PERSIS 3 soal konsep (Misconception Probe) buat satu fokus KC.
+        Spesifikasi bahasa DAP ikut ditempelin ke prompt biar LLM ngerti
+        sintaks yang bener pas bikin soal.
         """
+        # Muat dulu spesifikasi bahasa DAP biar soal yang dibikin nyambung.
         dap_prompt = get_dap_prompt()
 
         prompt = f"""{dap_prompt}
@@ -73,7 +91,8 @@ Each object in the JSON array must have these keys exactly:
 
         response_text = await self.generate(prompt)
 
-        # Clean up Markdown formatting from response if present
+        # LLM sering ngebungkus JSON pakai ```json ... ``` — buang dulu pagarnya
+        # biar json.loads gak error.
         clean_text = response_text.strip()
         if clean_text.startswith("```"):
             lines = clean_text.splitlines()
@@ -83,16 +102,175 @@ Each object in the JSON array must have these keys exactly:
                 lines = lines[:-1]
             clean_text = "\n".join(lines).strip()
 
+        # Wajib berupa list minimal 3 soal; kalau nggak, biar caller yang
+        # nangani (biasanya fallback ke soal statis).
         data = json.loads(clean_text)
         if not isinstance(data, list) or len(data) < 3:
             raise ValueError("LLM did not return a JSON list of at least 3 exercises")
 
-        return data[:3]
+        return data[:3]  # Ambil 3 pertama aja, sisanya (kalau ada) dibuang.
+
+    async def generate_confirmation_question(
+        self,
+        question_text: str,
+        student_answer: str,
+        kc_focus: str | None,
+        lang: str = "en",
+    ) -> dict:
+        """
+        Habis siswa jawab soal Misconception Probe dengan BENAR, bikin satu
+        pertanyaan lanjutan gaya "kenapa/gimana" yang nyuruh dia jelasin
+        alasannya — biar ketahuan dia paham beneran, bukan cuma hoki nebak.
+
+        Balikin {"question_en": str, "question_id": str}. WAJIB gak bocorin jawaban.
+        """
+        prompt = f"""You are a Socratic computer-science tutor. A student just answered a concept-check question CORRECTLY.
+Concept being tested: "{kc_focus or 'introductory programming'}".
+
+Question they answered:
+\"\"\"{question_text}\"\"\"
+
+Their (correct) answer: "{student_answer}"
+
+Write ONE short, open-ended follow-up question that prompts the student to explain WHY or HOW their answer is correct, so we can check they truly understand instead of having guessed. Examples of the desired style: "What made you choose that answer?", "How does that actually happen step by step?", "Why does that work?".
+
+Rules:
+- Ask for reasoning ("why" / "how"), never a yes/no question.
+- Do NOT restate or reveal the correct answer.
+- Keep it under 25 words, warm and encouraging.
+- Provide both English and Indonesian.
+
+Respond ONLY with a raw JSON object (no markdown fences, no extra text) with exactly these keys:
+- "question_en": string
+- "question_id": string
+"""
+        response_text = await self.generate(prompt)
+        data = json.loads(_strip_code_fences(response_text))
+        if not isinstance(data, dict) or "question_en" not in data:
+            raise ValueError("LLM did not return a valid confirmation-question object")
+        return {
+            "question_en": str(data.get("question_en", "")).strip(),
+            "question_id": str(data.get("question_id", "") or data.get("question_en", "")).strip(),
+        }
+
+    async def judge_understanding(
+        self,
+        confirm_question: str,
+        student_explanation: str,
+        question_text: str,
+        student_answer: str,
+        kc_focus: str | None,
+        lang: str = "en",
+    ) -> dict:
+        """
+        Nilai seberapa bagus penjelasan bebas siswa nunjukin dia paham konsepnya,
+        dalam bentuk persen bulat 0-100.
+
+        Balikin {"score": int, "feedback_en": str, "feedback_id": str}.
+        """
+        prompt = f"""You are grading whether a student TRULY understands a concept, based on how they explain their reasoning.
+
+Concept being tested: "{kc_focus or 'introductory programming'}".
+Original question:
+\"\"\"{question_text}\"\"\"
+Student's answer to it: "{student_answer}"
+
+We then asked the student to justify their reasoning:
+\"\"\"{confirm_question}\"\"\"
+The student's explanation:
+\"\"\"{student_explanation}\"\"\"
+
+Judge ONLY the explanation. Award a percentage score from 0 to 100 for how well it demonstrates real conceptual understanding:
+- 85-100: clearly explains the underlying reason/mechanism in their own words.
+- 70-84: mostly correct reasoning with minor gaps.
+- 40-69: vague, partially correct, or restates the answer without explaining why/how.
+- 0-39: empty, off-topic, incorrect, or "I don't know".
+
+Then write ONE short (under 40 words) piece of encouraging feedback. If the score is high, affirm what they got right. If low, gently nudge them to think about the mechanism WITHOUT revealing the answer.
+
+Respond ONLY with a raw JSON object (no markdown fences, no extra text) with exactly these keys:
+- "score": integer between 0 and 100
+- "feedback_en": string
+- "feedback_id": string
+"""
+        response_text = await self.generate(prompt)
+        data = json.loads(_strip_code_fences(response_text))
+        if not isinstance(data, dict) or "score" not in data:
+            raise ValueError("LLM did not return a valid understanding-judgement object")
+        try:
+            score = int(round(float(data.get("score", 0))))
+        except (TypeError, ValueError):
+            raise ValueError("LLM returned a non-numeric understanding score")
+        score = max(0, min(100, score))
+        return {
+            "score": score,
+            "feedback_en": str(data.get("feedback_en", "")).strip(),
+            "feedback_id": str(data.get("feedback_id", "") or data.get("feedback_en", "")).strip(),
+        }
 
 
+def _strip_code_fences(text: str) -> str:
+    """Buang pagar Markdown ``` yang kadang dipakai model buat mbungkus JSON."""
+    clean_text = (text or "").strip()
+    if clean_text.startswith("```"):
+        lines = clean_text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        clean_text = "\n".join(lines).strip()
+    return clean_text
+
+
+def heuristic_understanding_score(student_explanation: str, student_answer: str = "") -> dict:
+    """
+    Nilai kualitas penjelasan TANPA LLM — cadangan pas gak ada LLM beneran
+    yang dikonfigurasi atau pas panggilan ke LLM gagal. Ngasih nilai lebih
+    ke penjelasan yang cukup panjang dan pakai kata sebab-akibat ("karena",
+    "sehingga", "maka", dst), bukan yang cuma ngulang jawaban doang.
+    """
+    text = (student_explanation or "").strip()
+    words = [w for w in text.split() if w.strip()]
+    word_count = len(words)
+
+    if word_count == 0:
+        return {
+            "score": 0,
+            "feedback_en": "It looks like your explanation was empty. Try describing your reasoning in a sentence or two.",
+            "feedback_id": "Sepertinya penjelasanmu masih kosong. Coba jelaskan alasanmu dalam satu atau dua kalimat.",
+        }
+
+    reasoning_markers = (
+        "because", "since", "so that", "so ", "therefore", "then", "when", "if ",
+        "store", "value", "order", "before", "after", "swap", "loop", "step",
+        "karena", "sehingga", "maka", "kemudian", "sebelum", "sesudah", "nilai", "menyimpan",
+    )
+    lower = text.lower()
+    marker_hits = sum(1 for m in reasoning_markers if m in lower)
+
+    # Nilai dasar naik ngikutin panjang jawaban; kata penanda alasan nambah bonus.
+    length_score = min(60, word_count * 6)
+    depth_score = min(40, marker_hits * 12)
+    score = max(0, min(100, length_score + depth_score))
+
+    # Jawaban super pendek tanpa penanda alasan (cuma ngulang jawaban) gak boleh lolos.
+    if word_count <= 3 and marker_hits == 0:
+        score = min(score, 45)
+
+    if score >= 70:
+        feedback_en = "Great — you explained the reasoning behind your answer clearly."
+        feedback_id = "Bagus — kamu menjelaskan alasan di balik jawabanmu dengan jelas."
+    else:
+        feedback_en = "You're on the right track, but try to explain the mechanism — what actually happens and why."
+        feedback_id = "Kamu di jalur yang benar, tetapi coba jelaskan mekanismenya — apa yang sebenarnya terjadi dan mengapa."
+
+    return {"score": score, "feedback_en": feedback_en, "feedback_id": feedback_id}
+
+
+# Provider "boongan" buat dev/offline: gak manggil API manapun, balikin teks statis.
 class DummyLLMProvider(LLMProvider):
     async def generate(self, prompt: str, **kwargs) -> str:
-        # Realistic Socratic fallback hint
+        # Hint Socratic statis biar alur tetep jalan walau tanpa LLM beneran.
         return (
             "💡 **Tutor Hint (Mock)**: Check the order of your assignments! "
             "If you overwrite your variable before copying its value to your helper variable, "
@@ -102,9 +280,25 @@ class DummyLLMProvider(LLMProvider):
     async def generate_misconception_probe(self, *args, **kwargs) -> list[dict]:
         raise ValueError("DummyLLMProvider cannot generate structured quiz questions.")
 
+    async def generate_confirmation_question(
+        self, question_text, student_answer, kc_focus, lang="en"
+    ) -> dict:
+        # Static reflective prompt so the confirmation flow still works without a real LLM.
+        return {
+            "question_en": "Nice — that's correct! In your own words, why is that the right answer? Walk me through your reasoning.",
+            "question_id": "Bagus — itu benar! Dengan kata-katamu sendiri, mengapa itu jawaban yang tepat? Jelaskan alasanmu.",
+        }
+
+    async def judge_understanding(
+        self, confirm_question, student_explanation, question_text, student_answer, kc_focus, lang="en"
+    ) -> dict:
+        return heuristic_understanding_score(student_explanation, student_answer)
+
+# Provider asli: nembak API DeepSeek lewat HTTP.
 class DeepSeekLLMProvider(LLMProvider):
     async def generate(self, prompt: str, **kwargs) -> str:
         api_key = settings.LLM_API_KEY
+        # Kalau API key belum diisi, jangan error — kasih hint fallback aja.
         if not api_key or api_key == "dummy-api-key":
             return (
                 "💡 **Tutor Hint (Local Fallback)**: DeepSeek API Key is not configured. "
@@ -156,6 +350,8 @@ class DeepSeekLLMProvider(LLMProvider):
         except Exception as e:
             return f"Failed to connect to DeepSeek API: {str(e)}"
 
+# Factory: pilih provider sesuai setting LLM_PROVIDER. Ini satu-satunya
+# tempat provider dibikin, jadi ganti provider cukup ubah config.
 def get_llm_provider() -> LLMProvider:
     provider = settings.LLM_PROVIDER.lower()
     if provider == "dummy":
@@ -166,7 +362,8 @@ def get_llm_provider() -> LLMProvider:
         raise ValueError(f"Unknown LLM Provider: {settings.LLM_PROVIDER}")
 
 def get_dap_prompt() -> str:
-    """Reads the DAP syntax and specification prompt from backend/dap_llm_prompt.md."""
+    """Baca spesifikasi & sintaks bahasa DAP dari backend/dap_llm_prompt.md.
+    Isinya ditempelin ke prompt biar LLM bikin soal yang sesuai bahasa DAP."""
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         # llm.py is in backend/app/core/
