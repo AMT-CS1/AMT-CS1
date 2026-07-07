@@ -236,3 +236,30 @@ def get_pmatrix_from_ast(buggy_ast: dict, reference_asts: list[dict], q_matrix: 
                 p_matrix[i] = 0
 
     return p_matrix
+
+def find_closest_reference(buggy_ast: dict, references: list[dict] ) -> str | None:
+    """
+    Extension: Closest Ref (AST + CL).
+
+    Cari, dari N referensi solusi valid, SATU yang paling dekat secara
+    struktural ke jawaban siswa. Dipakai buat nyuntikkan kode pembanding ke
+    prompt LLM (bareng top-k miskonsepsi & problem+jawaban siswa)
+
+    Balikin SOURCE CODE (pseudocode DAP, string) dari referensi ter-dekat.
+    None kalau gak ada referensi sama sekali.
+    """
+    if not references:
+        return None
+
+    best_ref_code: str | None = None
+    best_failures: set[int] | None = None
+
+    for ref in references:
+        failures = detect_ast_failures(buggy_ast, ref["ast"])
+        if best_failures is None or len(failures) < len(best_failures):
+            best_failures = failures
+            best_ref_code = ref["code"]
+            if not best_failures:
+                break  # udah identik sempurna, gak bakal lebih deket lagi
+
+    return best_ref_code
