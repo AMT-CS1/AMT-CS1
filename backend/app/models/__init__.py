@@ -13,6 +13,7 @@ from app.models.problem import Problem
 from app.models.hint_quiz import HintQuizQuestion
 from app.models.quiz_progress import QuizProgress
 from app.models.feedback import Feedback
+from app.models.misconception import MisconceptionEntry
 
 __all__ = [
     "Base",
@@ -29,6 +30,7 @@ __all__ = [
     "Problem",
     "HintQuizQuestion",
     "QuizProgress",
-    "Feedback"
+    "Feedback",
+    "MisconceptionEntry"
 ]
 
