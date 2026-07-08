@@ -83,6 +83,8 @@ async def retrieve_top_k(session, query_embedding: list[float], top_k: int) -> l
                 "id": str(entry.id),
                 "description": entry.description,
                 "example": entry.example,
+                "wrong_example": entry.wrong_example,
+                "correct_example": entry.correct_example,
                 "kc_tags": entry.kc_tags,
                 "source": entry.source,
                 "distance": round(float(distance), 6),

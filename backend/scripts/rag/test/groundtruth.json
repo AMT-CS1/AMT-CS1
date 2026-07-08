@@ -1,0 +1,29 @@
+{
+  "ground_truth": [
+    {
+      "query_index": 1,
+      "expected_code": "OP-01",
+      "reasoning": "Pakai '=' di kondisi if, harusnya '=='. Kode OP-01: pakai assignment bukan perbandingan di kondisi."
+    },
+    {
+      "query_index": 2,
+      "expected_code": "CD-01",
+      "reasoning": "Kondisi saling eksklusif (grade A/B/C/D) ditulis sebagai if terpisah, bukan else-if -- semua if dievaluasi independen, berpotensi cabang lebih dari satu tercetak atau tertimpa. Kode CD-01."
+    },
+    {
+      "query_index": 3,
+      "expected_code": "LO-14",
+      "reasoning": "Loop while tidak punya langkah update (i <- i + 1) di badannya -- kondisi i <= n tidak akan pernah berubah, loop tak berhenti. Kode LO-14."
+    },
+    {
+      "query_index": 4,
+      "expected_code": "VA-06",
+      "reasoning": "Siswa menulis b <- a dengan asumsi ini menukar isi kedua variabel, padahal cuma menyalin nilai a ke b (nilai asli b hilang, a tidak ikut berubah). Kode VA-06: assignment dikira bisa menyamakan/menukar dua arah."
+    },
+    {
+      "query_index": 5,
+      "expected_code": "SQ-01",
+      "reasoning": "output(luas) dipanggil sebelum luas dihitung (baris 'luas <- panjang * lebar' ada setelahnya). Kode SQ-01: output dipanggil sebelum nilai yang dibutuhkan selesai dihitung."
+    }
+  ]
+}

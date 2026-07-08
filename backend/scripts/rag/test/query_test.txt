@@ -1,0 +1,77 @@
+Soal: Tulis program yang membaca sebuah bilangan bulat n, lalu menampilkan "Genap" jika n habis dibagi 2, atau "Ganjil" jika tidak.
+
+Jawaban siswa:
+program CekGenapGanjil
+kamus
+    n : integer
+algoritma
+    input(n)
+    if n mod 2 = 0 then
+        output("Genap")
+    else
+        output("Ganjil")
+    endif
+endprogram
+---
+Soal: Tulis program yang menerima nilai ujian (0-100) dan menampilkan grade: "A" jika >=90, "B" jika >=80, "C" jika >=70, selain itu "D".
+
+Jawaban siswa:
+program HitungGrade
+kamus
+    nilai : integer
+algoritma
+    input(nilai)
+    if nilai >= 90 then
+        output("A")
+    endif
+    if nilai >= 80 then
+        output("B")
+    endif
+    if nilai >= 70 then
+        output("C")
+    endif
+    if nilai < 70 then
+        output("D")
+    endif
+endprogram
+---
+Soal: Tulis program yang menampilkan angka 1 sampai n menggunakan perulangan while, dengan n dibaca dari input.
+
+Jawaban siswa:
+program TampilkanAngka
+kamus
+    n, i : integer
+algoritma
+    input(n)
+    i <- 1
+    while i <= n do
+        output(i)
+    endwhile
+endprogram
+---
+Soal: Tulis program yang menukar isi dua variabel a dan b, sehingga setelah program berjalan a berisi nilai awal b dan b berisi nilai awal a.
+
+Jawaban siswa:
+program TukarNilai
+kamus
+    a, b : integer
+algoritma
+    input(a)
+    input(b)
+    b <- a
+    output(a)
+    output(b)
+endprogram
+---
+Soal: Tulis program yang membaca panjang dan lebar sebuah persegi panjang, lalu menampilkan luasnya.
+
+Jawaban siswa:
+program HitungLuas
+kamus
+    panjang, lebar, luas : integer
+algoritma
+    input(panjang)
+    output(luas)
+    input(lebar)
+    luas <- panjang * lebar
+endprogram

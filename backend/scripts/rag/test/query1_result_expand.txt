@@ -1,0 +1,220 @@
+{
+  "model": "openai/text-embedding-3-small",
+  "top_k": 5,
+  "generated_at": "2026-07-08T21:11:03.936349+00:00",
+  "results": [
+    {
+      "query": "Soal: Tulis program yang membaca sebuah bilangan bulat n, lalu menampilkan \"Genap\" jika n habis dibagi 2, atau \"Ganjil\" jika tidak.\n\nJawaban siswa:\nprogram CekGenapGanjil\nkamus\n    n : integer\nalgoritma\n    input(n)\n    if n mod 2 = 0 then\n        output(\"Genap\")\n    else\n        output(\"Ganjil\")\n    endif\nendprogram",
+      "query_embedding_meta": {
+        "token_count": 105,
+        "latency_ms": 6511.06,
+        "status": "ok",
+        "error_message": null
+      },
+      "top_k": [
+        {
+          "rank": 1,
+          "id": "d51c8c3f-46a9-427c-a80e-a56ef5c40c9f",
+          "description": "Student believes that Boolean expressions must be explicitly compared to True/False or wrapped in if/else before they can be used or returned.",
+          "example": "if (n > 0) == True or if n % 2 == 0: return True else return False.",
+          "wrong_example": "if (n > 0) == True or if n % 2 == 0: return True else return False.",
+          "correct_example": "if (n > 0) == True or if n % 2 == 0: return True else return False.",
+          "kc_tags": "CD, EX, OP",
+          "source": "McMining 4; McMining 26",
+          "distance": 0.563464,
+          "similarity": 0.436536
+        },
+        {
+          "rank": 2,
+          "id": "1703bb2c-f11b-4fbb-bbb4-49daeeb7d011",
+          "description": "Student believes a computed result becomes the final answer automatically without an explicit output, display, or recording step.",
+          "example": "After calculating volume, student stops the algorithm without writing or displaying the volume.",
+          "wrong_example": "After calculating volume, student stops the algorithm without writing or displaying the volume.",
+          "correct_example": "After calculating volume, student stops the algorithm without writing or displaying the volume.",
+          "kc_tags": "IO, SQ",
+          "source": "Expert curation for AP1 pseudocode tasks",
+          "distance": 0.591597,
+          "similarity": 0.408403
+        },
+        {
+          "rank": 3,
+          "id": "8e3e03be-6bea-441f-b546-c9214f29481b",
+          "description": "Student believes the counters of two nested loops with fixed numbers of repetitions should be multiplied together to determine the number of iterations, rather than understanding the inner loop repeats fully for each outer iteration.",
+          "example": "For an outer loop repeating 3 times and an inner loop repeating 2 times, student says 'so six times' when asked how many times a single inner-loop statement executes total, without tracing the nested structure.",
+          "wrong_example": "For an outer loop repeating 3 times and an inner loop repeating 2 times, student says 'so six times' when asked how many times a single inner-loop statement executes total, without tracing the nested structure.",
+          "correct_example": "For an outer loop repeating 3 times and an inner loop repeating 2 times, student says 'so six times' when asked how many times a single inner-loop statement executes total, without tracing the nested structure.",
+          "kc_tags": "LO",
+          "source": "Bastian&Mühling MC",
+          "distance": 0.596169,
+          "similarity": 0.403831
+        },
+        {
+          "rank": 4,
+          "id": "29bf622b-0111-4554-b5f9-392d22a1e0ee",
+          "description": "Student believes that an if/selection statement can repeat like a loop while its condition holds.",
+          "example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "wrong_example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "correct_example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "kc_tags": "CD, LO",
+          "source": "McMining 41; Sychev RECsl",
+          "distance": 0.605333,
+          "similarity": 0.394667
+        },
+        {
+          "rank": 5,
+          "id": "9f2506e8-9339-47d7-a3e1-2adf3c37f35b",
+          "description": "Student believes input or data statements directly print values or place values into memory without an explicit variable-receiving step.",
+          "example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "wrong_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "correct_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "kc_tags": "IO, VA",
+          "source": "Bayman&Mayer READ/DATA",
+          "distance": 0.606249,
+          "similarity": 0.393751
+        }
+      ]
+    },
+    {
+      "query": "Soal: Tulis program yang menampilkan angka 1 sampai 5 menggunakan perulangan while.\n\nJawaban siswa:\nprogram TampilkanAngka\nkamus\n    i : integer\nalgoritma\n    i <- 1\n    if i <= 5 then\n        output(i)\n        i <- i + 1\n    endif\nendprogram",
+      "query_embedding_meta": {
+        "token_count": 78,
+        "latency_ms": 696.33,
+        "status": "ok",
+        "error_message": null
+      },
+      "top_k": [
+        {
+          "rank": 1,
+          "id": "29bf622b-0111-4554-b5f9-392d22a1e0ee",
+          "description": "Student believes that an if/selection statement can repeat like a loop while its condition holds.",
+          "example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "wrong_example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "correct_example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "kc_tags": "CD, LO",
+          "source": "McMining 41; Sychev RECsl",
+          "distance": 0.491776,
+          "similarity": 0.508224
+        },
+        {
+          "rank": 2,
+          "id": "b1f53dcb-e310-44ff-9a7e-e240a0785bc7",
+          "description": "Student believes that while-loops are better than for-loops.",
+          "example": "Student always prefers while-loop even when the number of repetitions is known.",
+          "wrong_example": "Student always prefers while-loop even when the number of repetitions is known.",
+          "correct_example": "Student always prefers while-loop even when the number of repetitions is known.",
+          "kc_tags": "LO",
+          "source": "Qian 23",
+          "distance": 0.531799,
+          "similarity": 0.468201
+        },
+        {
+          "rank": 3,
+          "id": "187ac7bd-e963-4862-b59f-dbfa8a56235f",
+          "description": "Student believes that colons (:) are used for variable assignment.",
+          "example": "x : 5 instead of x = 5.",
+          "wrong_example": "x : 5 instead of x = 5.",
+          "correct_example": "x : 5 instead of x = 5.",
+          "kc_tags": "OP, VA",
+          "source": "McMining 17",
+          "distance": 0.55769,
+          "similarity": 0.44231
+        },
+        {
+          "rank": 4,
+          "id": "5b411bb0-0c22-4429-b553-261921c2b9f6",
+          "description": "Student believes that for-loops are better than while-loops.",
+          "example": "Student always prefers for-loop even when the number of repetitions is unknown.",
+          "wrong_example": "Student always prefers for-loop even when the number of repetitions is unknown.",
+          "correct_example": "Student always prefers for-loop even when the number of repetitions is unknown.",
+          "kc_tags": "LO",
+          "source": "Qian 21",
+          "distance": 0.559455,
+          "similarity": 0.440545
+        },
+        {
+          "rank": 5,
+          "id": "8e3e03be-6bea-441f-b546-c9214f29481b",
+          "description": "Student believes the counters of two nested loops with fixed numbers of repetitions should be multiplied together to determine the number of iterations, rather than understanding the inner loop repeats fully for each outer iteration.",
+          "example": "For an outer loop repeating 3 times and an inner loop repeating 2 times, student says 'so six times' when asked how many times a single inner-loop statement executes total, without tracing the nested structure.",
+          "wrong_example": "For an outer loop repeating 3 times and an inner loop repeating 2 times, student says 'so six times' when asked how many times a single inner-loop statement executes total, without tracing the nested structure.",
+          "correct_example": "For an outer loop repeating 3 times and an inner loop repeating 2 times, student says 'so six times' when asked how many times a single inner-loop statement executes total, without tracing the nested structure.",
+          "kc_tags": "LO",
+          "source": "Bastian&Mühling MC",
+          "distance": 0.560988,
+          "similarity": 0.439012
+        }
+      ]
+    },
+    {
+      "query": "Soal: Tulis program untuk menentukan kategori usia: anak-anak (<=10), remaja (11-18), atau dewasa (>18).\n\nJawaban siswa:\nprogram KategoriUsia\nkamus\n    umur : integer\nalgoritma\n    input(umur)\n    if umur <= 10 then\n        output(\"anak-anak\")\n    endif\n    if umur > 10 and umur <= 18 then\n        output(\"remaja\")\n    endif\n    if umur > 18 then\n        output(\"dewasa\")\n    endif\nendprogram",
+      "query_embedding_meta": {
+        "token_count": 131,
+        "latency_ms": 2997.48,
+        "status": "ok",
+        "error_message": null
+      },
+      "top_k": [
+        {
+          "rank": 1,
+          "id": "b4f8b742-c04a-486f-ab60-9d61dce43818",
+          "description": "Student believes that variables such as \"age\" and \"Age\" refer to the same variable.",
+          "example": "Student treats age and Age as the same identifier.",
+          "wrong_example": "Student treats age and Age as the same identifier.",
+          "correct_example": "Student treats age and Age as the same identifier.",
+          "kc_tags": "VA",
+          "source": "Qian 9",
+          "distance": 0.620317,
+          "similarity": 0.379683
+        },
+        {
+          "rank": 2,
+          "id": "72f959b5-413b-4450-85c5-6f6f9760c8ff",
+          "description": "Student believes that multiple mutually exclusive conditions in a control-flow construct must each be written as separate if statements.",
+          "example": "Separate if statements for score >= 90, score >= 80, score >= 70, causing later assignments to overwrite earlier ones.",
+          "wrong_example": "Separate if statements for score >= 90, score >= 80, score >= 70, causing later assignments to overwrite earlier ones.",
+          "correct_example": "Separate if statements for score >= 90, score >= 80, score >= 70, causing later assignments to overwrite earlier ones.",
+          "kc_tags": "CD",
+          "source": "McMining 33",
+          "distance": 0.623584,
+          "similarity": 0.376416
+        },
+        {
+          "rank": 3,
+          "id": "9f2506e8-9339-47d7-a3e1-2adf3c37f35b",
+          "description": "Student believes input or data statements directly print values or place values into memory without an explicit variable-receiving step.",
+          "example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "wrong_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "correct_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "kc_tags": "IO, VA",
+          "source": "Bayman&Mayer READ/DATA",
+          "distance": 0.62843,
+          "similarity": 0.37157
+        },
+        {
+          "rank": 4,
+          "id": "d469073b-cd8b-4d55-8f68-1952b24e5191",
+          "description": "Student believes that the arithmetic operation + has higher precedence than the arithmetic operation /.",
+          "example": "average = 10 + 20 + 30 / 3; student expects (10 + 20 + 30) / 3.",
+          "wrong_example": "average = 10 + 20 + 30 / 3; student expects (10 + 20 + 30) / 3.",
+          "correct_example": "average = 10 + 20 + 30 / 3; student expects (10 + 20 + 30) / 3.",
+          "kc_tags": "EX, OP",
+          "source": "McMining 63",
+          "distance": 0.633396,
+          "similarity": 0.366604
+        },
+        {
+          "rank": 5,
+          "id": "29bf622b-0111-4554-b5f9-392d22a1e0ee",
+          "description": "Student believes that an if/selection statement can repeat like a loop while its condition holds.",
+          "example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "wrong_example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "correct_example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "kc_tags": "CD, LO",
+          "source": "McMining 41; Sychev RECsl",
+          "distance": 0.640751,
+          "similarity": 0.359249
+        }
+      ]
+    }
+  ]
+}

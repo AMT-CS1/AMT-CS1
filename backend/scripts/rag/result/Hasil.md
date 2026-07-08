@@ -17,3 +17,12 @@ Total token     : 2924
 Waktu total     : 60.94s
 Rata-rata/baris : 0.86s
 Disimpan ke     : scripts/rag/result/misconceptions_new.parquet
+
+RINGKASAN
+Total baris     : 71
+Sukses          : 71
+Gagal           : 0
+Total token     : 6014
+Waktu total     : 52.62s
+Rata-rata/baris : 0.74s
+Disimpan ke     : scripts/rag/result/misconception_expand.parquet

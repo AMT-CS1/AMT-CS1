@@ -55,10 +55,12 @@ async def process_all(df: pd.DataFrame, api_key: str) -> list[dict]:
         description = str(row["Misconception"]).strip()
         code = str(row["Code"]).strip() if pd.notna(row["Code"]) else None
         example = str(row["Example"]) if pd.notna(row["Example"]) else None
+        wrong_example = str(row["Example"]) if pd.notna(row["Example"]) else None
+        correct_example = str(row["Example"]) if pd.notna(row["Example"]) else None
         kc_tags = str(row["Concept"]).strip() if pd.notna(row["Concept"]) else ""
         source = str(row["Source ID(s)"]).strip() if pd.notna(row["Source ID(s)"]) else ""
 
-        embed_text = build_embedding_text(description, example)
+        embed_text = build_embedding_text(description, example, wrong_example, correct_example)
         result = await get_embedding(embed_text, api_key=api_key)
 
         status_icon = "OK " if result.status == "ok" else "ERR"
@@ -80,6 +82,8 @@ async def process_all(df: pd.DataFrame, api_key: str) -> list[dict]:
                 "code": code,
                 "description": description,
                 "example": example,
+                "wrong_example": wrong_example,
+                "correct_example": correct_example,
                 "kc_tags": kc_tags,
                 "source": source,
                 "embedded_text_len": len(embed_text),
@@ -112,7 +116,7 @@ def main():
         sys.exit(1)
 
     df = pd.read_excel(args.input)
-    required_cols = {"No", "Source ID(s)", "Concept", "Code", "Misconception", "Example", "Curation note"}
+    required_cols = {"No", "Source ID(s)", "Concept", "Code", "Misconception", "Example", "Curation note", "wrong_example", "correct_example"}
     missing = required_cols - set(df.columns)
     if missing:
         print(f"ERROR: kolom hilang di excel: {missing}", file=sys.stderr)

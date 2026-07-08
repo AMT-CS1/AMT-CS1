@@ -39,7 +39,7 @@ class EmbeddingResult:
     model: str = MODEL_ID
 
 
-def build_embedding_text(description: str, example: str | None) -> str:
+def build_embedding_text(description: str, example: str | None, wrong_example: str | None, correct_example: str | None) -> str:
     """
     Susun teks yang akan di-embed: description + example (kalau ada dan
     bukan placeholder kosong "-"). Dipisah jadi fungsi sendiri supaya cara
@@ -49,6 +49,10 @@ def build_embedding_text(description: str, example: str | None) -> str:
     text = description.strip()
     if example and example.strip() and example.strip() != "-":
         text = f"{text}\n\nContoh: {example.strip()}"
+    if wrong_example and example.strip() and example.strip() != "-":
+        text = f"{text}\n\nContoh: {wrong_example.strip()}"
+    if correct_example and example.strip() and example.strip() != "-":
+        text = f"{text}\n\nContoh: {correct_example.strip()}"
     return text
 
 

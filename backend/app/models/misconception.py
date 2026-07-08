@@ -30,6 +30,8 @@ class MisconceptionEntry(Base):
     code: Mapped[str | None] = mapped_column(String(20), nullable=True)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     example: Mapped[str | None] = mapped_column(Text, nullable=True)
+    wrong_example: Mapped[str | None] = mapped_column(Text, nullable=True)
+    correct_example: Mapped[str | None] = mapped_column(Text, nullable=True)
     kc_tags: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     source: Mapped[str] = mapped_column(String(255), nullable=False, default="llm-generated")
     embedding: Mapped[list[float]] = mapped_column(Vector(1536), nullable=False)
