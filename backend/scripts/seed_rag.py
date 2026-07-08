@@ -81,6 +81,7 @@ async def seed_rag(input_path: str, reset: bool = False):
         inserted = 0
         for _, row in ok_df.iterrows():
             entry = MisconceptionEntry(
+                code=row["code"] if pd.notna(row["code"]) else None,
                 description=row["description"],
                 example=row["example"] if pd.notna(row["example"]) else None,
                 kc_tags=row["kc_tags"] if pd.notna(row["kc_tags"]) else "",

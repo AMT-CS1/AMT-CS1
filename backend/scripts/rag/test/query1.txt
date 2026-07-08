@@ -1,0 +1,47 @@
+Soal: Tulis program yang membaca sebuah bilangan bulat n, lalu menampilkan "Genap" jika n habis dibagi 2, atau "Ganjil" jika tidak.
+
+Jawaban siswa:
+program CekGenapGanjil
+kamus
+    n : integer
+algoritma
+    input(n)
+    if n mod 2 = 0 then
+        output("Genap")
+    else
+        output("Ganjil")
+    endif
+endprogram
+---
+Soal: Tulis program yang menampilkan angka 1 sampai 5 menggunakan perulangan while.
+
+Jawaban siswa:
+program TampilkanAngka
+kamus
+    i : integer
+algoritma
+    i <- 1
+    if i <= 5 then
+        output(i)
+        i <- i + 1
+    endif
+endprogram
+---
+Soal: Tulis program untuk menentukan kategori usia: anak-anak (<=10), remaja (11-18), atau dewasa (>18).
+
+Jawaban siswa:
+program KategoriUsia
+kamus
+    umur : integer
+algoritma
+    input(umur)
+    if umur <= 10 then
+        output("anak-anak")
+    endif
+    if umur > 10 and umur <= 18 then
+        output("remaja")
+    endif
+    if umur > 18 then
+        output("dewasa")
+    endif
+endprogram

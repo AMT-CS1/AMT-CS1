@@ -53,6 +53,7 @@ async def process_all(df: pd.DataFrame, api_key: str) -> list[dict]:
     for _, row in df.iterrows():
         no = row["No"]
         description = str(row["Misconception"]).strip()
+        code = str(row["Code"]).strip() if pd.notna(row["Code"]) else None
         example = str(row["Example"]) if pd.notna(row["Example"]) else None
         kc_tags = str(row["Concept"]).strip() if pd.notna(row["Concept"]) else ""
         source = str(row["Source ID(s)"]).strip() if pd.notna(row["Source ID(s)"]) else ""
@@ -76,6 +77,7 @@ async def process_all(df: pd.DataFrame, api_key: str) -> list[dict]:
         records.append(
             {
                 "source_no": no,
+                "code": code,
                 "description": description,
                 "example": example,
                 "kc_tags": kc_tags,
@@ -110,7 +112,7 @@ def main():
         sys.exit(1)
 
     df = pd.read_excel(args.input)
-    required_cols = {"No", "Source ID(s)", "Concept", "Misconception", "Example"}
+    required_cols = {"No", "Source ID(s)", "Concept", "Code", "Misconception", "Example", "Curation note"}
     missing = required_cols - set(df.columns)
     if missing:
         print(f"ERROR: kolom hilang di excel: {missing}", file=sys.stderr)
