@@ -66,7 +66,7 @@ async def process_all(df: pd.DataFrame, api_key: str) -> list[dict]:
         status_icon = "OK " if result.status == "ok" else "ERR"
         print(
             f"[{status_icon}] No.{no:>2} | {result.latency_ms:>7.1f}ms | "
-            f"tokens={result.token_count} | {description[:50]}..."
+            f"tokens={result.token_count} | dimensions={len(result.embedding)} | {description[:50]}..."
         )
 
         if result.status == "ok":
@@ -104,6 +104,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", default="scripts/rag/data/bahan_rag.xlsx", help="Path ke excel sumber")
     parser.add_argument("--output", default="scripts/rag/result/misconceptions.parquet", help="Path parquet hasil")
+    parser.add_argument("--limit", default=None, type=int, help="Limit jumlah data yang di embed ")
     args = parser.parse_args()
 
     api_key = os.environ.get("OPEN_ROUTER_API_KEY")
@@ -121,6 +122,9 @@ def main():
     if missing:
         print(f"ERROR: kolom hilang di excel: {missing}", file=sys.stderr)
         sys.exit(1)
+
+    if args.limit is not None:
+        df = df.head(args.limit)
 
     print(f"Memproses {len(df)} baris dari {args.input}")
     print(f"Model: {MODEL_ID} (target dim: {EXPECTED_DIM})\n")

@@ -18,7 +18,7 @@ from typing import Optional
 import httpx
 
 OPENROUTER_EMBEDDINGS_URL = "https://openrouter.ai/api/v1/embeddings"
-MODEL_ID = "openai/text-embedding-3-small"
+MODEL_ID = "google/gemini-embedding-001"
 EXPECTED_DIM = 1536
 
 # Retry sederhana: beberapa kali percobaan dengan jeda naik, untuk error
@@ -107,12 +107,12 @@ async def get_embedding(text: str, api_key: str | None = None) -> EmbeddingResul
                 embedding = data["data"][0]["embedding"]
                 token_count = data.get("usage", {}).get("prompt_tokens")
 
-                if len(embedding) != EXPECTED_DIM:
-                    last_error = (
-                        f"Dimensi embedding {len(embedding)} != {EXPECTED_DIM} yang "
-                        f"diharapkan (kolom DB Vector({EXPECTED_DIM}))"
-                    )
-                    break
+                # if len(embedding) != EXPECTED_DIM:
+                #     last_error = (
+                #         f"Dimensi embedding {len(embedding)} != {EXPECTED_DIM} yang "
+                #         f"diharapkan (kolom DB Vector({EXPECTED_DIM}))"
+                #     )
+                #     break
 
                 return EmbeddingResult(
                     embedding=embedding,

@@ -1,0 +1,387 @@
+{
+  "model": "openai/text-embedding-3-small",
+  "top_k": 5,
+  "generated_at": "2026-07-08T23:02:35.048960+00:00",
+  "results": [
+    {
+      "query": "Soal: Tulis program yang membaca sebuah bilangan bulat n, lalu menampilkan \"Genap\" jika n habis dibagi 2, atau \"Ganjil\" jika tidak.\n\nJawaban siswa:\nprogram CekGenapGanjil\nkamus\n    n : integer\nalgoritma\n    input(n)\n    if n mod 2 = 0 then\n        output(\"Genap\")\n    else\n        output(\"Ganjil\")\n    endif\nendprogram",
+      "query_embedding_meta": {
+        "token_count": 105,
+        "latency_ms": 871.06,
+        "status": "ok",
+        "error_message": null
+      },
+      "top_k": [
+        {
+          "rank": 1,
+          "id": "d51c8c3f-46a9-427c-a80e-a56ef5c40c9f",
+          "description": "Student believes that Boolean expressions must be explicitly compared to True/False or wrapped in if/else before they can be used or returned.",
+          "example": "if (n > 0) == True or if n % 2 == 0: return True else return False.",
+          "wrong_example": "if (n > 0) == True or if n % 2 == 0: return True else return False.",
+          "correct_example": "if (n > 0) == True or if n % 2 == 0: return True else return False.",
+          "code": "EX-01",
+          "kc_tags": "CD, EX, OP",
+          "source": "McMining 4; McMining 26",
+          "distance": 0.563464,
+          "similarity": 0.436536
+        },
+        {
+          "rank": 2,
+          "id": "1703bb2c-f11b-4fbb-bbb4-49daeeb7d011",
+          "description": "Student believes a computed result becomes the final answer automatically without an explicit output, display, or recording step.",
+          "example": "After calculating volume, student stops the algorithm without writing or displaying the volume.",
+          "wrong_example": "After calculating volume, student stops the algorithm without writing or displaying the volume.",
+          "correct_example": "After calculating volume, student stops the algorithm without writing or displaying the volume.",
+          "code": "IO-05",
+          "kc_tags": "IO, SQ",
+          "source": "Expert curation for AP1 pseudocode tasks",
+          "distance": 0.591597,
+          "similarity": 0.408403
+        },
+        {
+          "rank": 3,
+          "id": "8e3e03be-6bea-441f-b546-c9214f29481b",
+          "description": "Student believes the counters of two nested loops with fixed numbers of repetitions should be multiplied together to determine the number of iterations, rather than understanding the inner loop repeats fully for each outer iteration.",
+          "example": "For an outer loop repeating 3 times and an inner loop repeating 2 times, student says 'so six times' when asked how many times a single inner-loop statement executes total, without tracing the nested structure.",
+          "wrong_example": "For an outer loop repeating 3 times and an inner loop repeating 2 times, student says 'so six times' when asked how many times a single inner-loop statement executes total, without tracing the nested structure.",
+          "correct_example": "For an outer loop repeating 3 times and an inner loop repeating 2 times, student says 'so six times' when asked how many times a single inner-loop statement executes total, without tracing the nested structure.",
+          "code": "LO-22",
+          "kc_tags": "LO",
+          "source": "Bastian&Mühling MC",
+          "distance": 0.596169,
+          "similarity": 0.403831
+        },
+        {
+          "rank": 4,
+          "id": "29bf622b-0111-4554-b5f9-392d22a1e0ee",
+          "description": "Student believes that an if/selection statement can repeat like a loop while its condition holds.",
+          "example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "wrong_example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "correct_example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "code": "CD-02",
+          "kc_tags": "CD, LO",
+          "source": "McMining 41; Sychev RECsl",
+          "distance": 0.605333,
+          "similarity": 0.394667
+        },
+        {
+          "rank": 5,
+          "id": "9f2506e8-9339-47d7-a3e1-2adf3c37f35b",
+          "description": "Student believes input or data statements directly print values or place values into memory without an explicit variable-receiving step.",
+          "example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "wrong_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "correct_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "code": "IO-01",
+          "kc_tags": "IO, VA",
+          "source": "Bayman&Mayer READ/DATA",
+          "distance": 0.606249,
+          "similarity": 0.393751
+        }
+      ]
+    },
+    {
+      "query": "Soal: Tulis program yang menerima nilai ujian (0-100) dan menampilkan grade: \"A\" jika >=90, \"B\" jika >=80, \"C\" jika >=70, selain itu \"D\".\n\nJawaban siswa:\nprogram HitungGrade\nkamus\n    nilai : integer\nalgoritma\n    input(nilai)\n    if nilai >= 90 then\n        output(\"A\")\n    endif\n    if nilai >= 80 then\n        output(\"B\")\n    endif\n    if nilai >= 70 then\n        output(\"C\")\n    endif\n    if nilai < 70 then\n        output(\"D\")\n    endif\nendprogram",
+      "query_embedding_meta": {
+        "token_count": 143,
+        "latency_ms": 646.75,
+        "status": "ok",
+        "error_message": null
+      },
+      "top_k": [
+        {
+          "rank": 1,
+          "id": "9f2506e8-9339-47d7-a3e1-2adf3c37f35b",
+          "description": "Student believes input or data statements directly print values or place values into memory without an explicit variable-receiving step.",
+          "example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "wrong_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "correct_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "code": "IO-01",
+          "kc_tags": "IO, VA",
+          "source": "Bayman&Mayer READ/DATA",
+          "distance": 0.548171,
+          "similarity": 0.451829
+        },
+        {
+          "rank": 2,
+          "id": "d469073b-cd8b-4d55-8f68-1952b24e5191",
+          "description": "Student believes that the arithmetic operation + has higher precedence than the arithmetic operation /.",
+          "example": "average = 10 + 20 + 30 / 3; student expects (10 + 20 + 30) / 3.",
+          "wrong_example": "average = 10 + 20 + 30 / 3; student expects (10 + 20 + 30) / 3.",
+          "correct_example": "average = 10 + 20 + 30 / 3; student expects (10 + 20 + 30) / 3.",
+          "code": "OP-05",
+          "kc_tags": "EX, OP",
+          "source": "McMining 63",
+          "distance": 0.560257,
+          "similarity": 0.439743
+        },
+        {
+          "rank": 3,
+          "id": "9ebe28d6-78ff-4167-b57f-a37022af4e9d",
+          "description": "Student believes that the arithmetic operation - has higher precedence than the arithmetic operation /.",
+          "example": "result = 100 - 10 / 2; student expects (100 - 10) / 2.",
+          "wrong_example": "result = 100 - 10 / 2; student expects (100 - 10) / 2.",
+          "correct_example": "result = 100 - 10 / 2; student expects (100 - 10) / 2.",
+          "code": "OP-06",
+          "kc_tags": "EX, OP",
+          "source": "McMining 64",
+          "distance": 0.567174,
+          "similarity": 0.432826
+        },
+        {
+          "rank": 4,
+          "id": "72f959b5-413b-4450-85c5-6f6f9760c8ff",
+          "description": "Student believes that multiple mutually exclusive conditions in a control-flow construct must each be written as separate if statements.",
+          "example": "Separate if statements for score >= 90, score >= 80, score >= 70, causing later assignments to overwrite earlier ones.",
+          "wrong_example": "Separate if statements for score >= 90, score >= 80, score >= 70, causing later assignments to overwrite earlier ones.",
+          "correct_example": "Separate if statements for score >= 90, score >= 80, score >= 70, causing later assignments to overwrite earlier ones.",
+          "code": "CD-01",
+          "kc_tags": "CD",
+          "source": "McMining 33",
+          "distance": 0.56991,
+          "similarity": 0.43009
+        },
+        {
+          "rank": 5,
+          "id": "9efd6e59-ae69-45c9-84d5-d94103925f2e",
+          "description": "Student believes that in the expression x == a or b, the comparison operator distributes to both operands of the or operator.",
+          "example": "if grade == \"A\" or \"B\": print(\"Good grade!\").",
+          "wrong_example": "if grade == \"A\" or \"B\": print(\"Good grade!\").",
+          "correct_example": "if grade == \"A\" or \"B\": print(\"Good grade!\").",
+          "code": "EX-02",
+          "kc_tags": "EX, OP",
+          "source": "McMining 18",
+          "distance": 0.580211,
+          "similarity": 0.419789
+        }
+      ]
+    },
+    {
+      "query": "Soal: Tulis program yang menampilkan angka 1 sampai n menggunakan perulangan while, dengan n dibaca dari input.\n\nJawaban siswa:\nprogram TampilkanAngka\nkamus\n    n, i : integer\nalgoritma\n    input(n)\n    i <- 1\n    while i <= n do\n        output(i)\n    endwhile\nendprogram",
+      "query_embedding_meta": {
+        "token_count": 81,
+        "latency_ms": 638.74,
+        "status": "ok",
+        "error_message": null
+      },
+      "top_k": [
+        {
+          "rank": 1,
+          "id": "29bf622b-0111-4554-b5f9-392d22a1e0ee",
+          "description": "Student believes that an if/selection statement can repeat like a loop while its condition holds.",
+          "example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "wrong_example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "correct_example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "code": "CD-02",
+          "kc_tags": "CD, LO",
+          "source": "McMining 41; Sychev RECsl",
+          "distance": 0.563037,
+          "similarity": 0.436963
+        },
+        {
+          "rank": 2,
+          "id": "9f2506e8-9339-47d7-a3e1-2adf3c37f35b",
+          "description": "Student believes input or data statements directly print values or place values into memory without an explicit variable-receiving step.",
+          "example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "wrong_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "correct_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "code": "IO-01",
+          "kc_tags": "IO, VA",
+          "source": "Bayman&Mayer READ/DATA",
+          "distance": 0.569561,
+          "similarity": 0.430439
+        },
+        {
+          "rank": 3,
+          "id": "b1f53dcb-e310-44ff-9a7e-e240a0785bc7",
+          "description": "Student believes that while-loops are better than for-loops.",
+          "example": "Student always prefers while-loop even when the number of repetitions is known.",
+          "wrong_example": "Student always prefers while-loop even when the number of repetitions is known.",
+          "correct_example": "Student always prefers while-loop even when the number of repetitions is known.",
+          "code": "LO-09",
+          "kc_tags": "LO",
+          "source": "Qian 23",
+          "distance": 0.571831,
+          "similarity": 0.428169
+        },
+        {
+          "rank": 4,
+          "id": "8e3e03be-6bea-441f-b546-c9214f29481b",
+          "description": "Student believes the counters of two nested loops with fixed numbers of repetitions should be multiplied together to determine the number of iterations, rather than understanding the inner loop repeats fully for each outer iteration.",
+          "example": "For an outer loop repeating 3 times and an inner loop repeating 2 times, student says 'so six times' when asked how many times a single inner-loop statement executes total, without tracing the nested structure.",
+          "wrong_example": "For an outer loop repeating 3 times and an inner loop repeating 2 times, student says 'so six times' when asked how many times a single inner-loop statement executes total, without tracing the nested structure.",
+          "correct_example": "For an outer loop repeating 3 times and an inner loop repeating 2 times, student says 'so six times' when asked how many times a single inner-loop statement executes total, without tracing the nested structure.",
+          "code": "LO-22",
+          "kc_tags": "LO",
+          "source": "Bastian&Mühling MC",
+          "distance": 0.577764,
+          "similarity": 0.422236
+        },
+        {
+          "rank": 5,
+          "id": "5b411bb0-0c22-4429-b553-261921c2b9f6",
+          "description": "Student believes that for-loops are better than while-loops.",
+          "example": "Student always prefers for-loop even when the number of repetitions is unknown.",
+          "wrong_example": "Student always prefers for-loop even when the number of repetitions is unknown.",
+          "correct_example": "Student always prefers for-loop even when the number of repetitions is unknown.",
+          "code": "LO-07",
+          "kc_tags": "LO",
+          "source": "Qian 21",
+          "distance": 0.598004,
+          "similarity": 0.401996
+        }
+      ]
+    },
+    {
+      "query": "Soal: Tulis program yang menukar isi dua variabel a dan b, sehingga setelah program berjalan a berisi nilai awal b dan b berisi nilai awal a.\n\nJawaban siswa:\nprogram TukarNilai\nkamus\n    a, b : integer\nalgoritma\n    input(a)\n    input(b)\n    b <- a\n    output(a)\n    output(b)\nendprogram",
+      "query_embedding_meta": {
+        "token_count": 91,
+        "latency_ms": 605.3,
+        "status": "ok",
+        "error_message": null
+      },
+      "top_k": [
+        {
+          "rank": 1,
+          "id": "8f1d7555-6067-4a13-af83-2b8dbd48093e",
+          "description": "Assigning the value of one variable to another variable links the two variables, so changing one also changes the other.",
+          "example": "After A = B, student thinks changing B later also changes A.",
+          "wrong_example": "After A = B, student thinks changing B later also changes A.",
+          "correct_example": "After A = B, student thinks changing B later also changes A.",
+          "code": "VA-08",
+          "kc_tags": "VA",
+          "source": "Qian 4",
+          "distance": 0.534886,
+          "similarity": 0.465114
+        },
+        {
+          "rank": 2,
+          "id": "af7770b9-e38c-457e-b163-b2ae063c4fa4",
+          "description": "Assignment statements are commutative, i.e., A = B is equivalent to B = A.",
+          "example": "Student thinks A = B and B = A have the same effect.",
+          "wrong_example": "Student thinks A = B and B = A have the same effect.",
+          "correct_example": "Student thinks A = B and B = A have the same effect.",
+          "code": "VA-06",
+          "kc_tags": "VA, OP",
+          "source": "Qian 2",
+          "distance": 0.535096,
+          "similarity": 0.464904
+        },
+        {
+          "rank": 3,
+          "id": "85205462-f5bf-48ed-99da-2e3e1a6a0e9f",
+          "description": "The assignment statement A = B + 1 changes the value of B by 1, as well as changing A.",
+          "example": "Student thinks A = B + 1 also increments B.",
+          "wrong_example": "Student thinks A = B + 1 also increments B.",
+          "correct_example": "Student thinks A = B + 1 also increments B.",
+          "code": "VA-07",
+          "kc_tags": "VA, OP",
+          "source": "Qian 3",
+          "distance": 0.543714,
+          "similarity": 0.456286
+        },
+        {
+          "rank": 4,
+          "id": "9f2506e8-9339-47d7-a3e1-2adf3c37f35b",
+          "description": "Student believes input or data statements directly print values or place values into memory without an explicit variable-receiving step.",
+          "example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "wrong_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "correct_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "code": "IO-01",
+          "kc_tags": "IO, VA",
+          "source": "Bayman&Mayer READ/DATA",
+          "distance": 0.548142,
+          "similarity": 0.451858
+        },
+        {
+          "rank": 5,
+          "id": "4126e31f-cde4-41ca-b0ed-a32a24281764",
+          "description": "Student believes that when multiple input statements use the same variable, only the first input determines the variable's value.",
+          "example": "After input x reads 5 and input x reads 9, student expects x to remain 5.",
+          "wrong_example": "After input x reads 5 and input x reads 9, student expects x to remain 5.",
+          "correct_example": "After input x reads 5 and input x reads 9, student expects x to remain 5.",
+          "code": "IO-03",
+          "kc_tags": "IO, VA",
+          "source": "Haberman PriorityDriven2",
+          "distance": 0.554795,
+          "similarity": 0.445205
+        }
+      ]
+    },
+    {
+      "query": "Soal: Tulis program yang membaca panjang dan lebar sebuah persegi panjang, lalu menampilkan luasnya.\n\nJawaban siswa:\nprogram HitungLuas\nkamus\n    panjang, lebar, luas : integer\nalgoritma\n    input(panjang)\n    output(luas)\n    input(lebar)\n    luas <- panjang * lebar\nendprogram",
+      "query_embedding_meta": {
+        "token_count": 88,
+        "latency_ms": 640.53,
+        "status": "ok",
+        "error_message": null
+      },
+      "top_k": [
+        {
+          "rank": 1,
+          "id": "181aac91-33f1-45a5-a9f4-cbfd0aebb2f8",
+          "description": "Student calls the entire program a loop.",
+          "example": "-",
+          "wrong_example": "-",
+          "correct_example": "-",
+          "code": "LO-16",
+          "kc_tags": "LO",
+          "source": "Sychev NOT2pl",
+          "distance": 0.614737,
+          "similarity": 0.385263
+        },
+        {
+          "rank": 2,
+          "id": "1703bb2c-f11b-4fbb-bbb4-49daeeb7d011",
+          "description": "Student believes a computed result becomes the final answer automatically without an explicit output, display, or recording step.",
+          "example": "After calculating volume, student stops the algorithm without writing or displaying the volume.",
+          "wrong_example": "After calculating volume, student stops the algorithm without writing or displaying the volume.",
+          "correct_example": "After calculating volume, student stops the algorithm without writing or displaying the volume.",
+          "code": "IO-05",
+          "kc_tags": "IO, SQ",
+          "source": "Expert curation for AP1 pseudocode tasks",
+          "distance": 0.62192,
+          "similarity": 0.37808
+        },
+        {
+          "rank": 3,
+          "id": "819766e8-b14f-46ca-a429-d3b6e05497fc",
+          "description": "Student believes that variable identifiers can only be one letter long.",
+          "example": "Student uses l, w, a instead of length, width, area.",
+          "wrong_example": "Student uses l, w, a instead of length, width, area.",
+          "correct_example": "Student uses l, w, a instead of length, width, area.",
+          "code": "VA-03",
+          "kc_tags": "VA",
+          "source": "McMining 56",
+          "distance": 0.622729,
+          "similarity": 0.377271
+        },
+        {
+          "rank": 4,
+          "id": "9f2506e8-9339-47d7-a3e1-2adf3c37f35b",
+          "description": "Student believes input or data statements directly print values or place values into memory without an explicit variable-receiving step.",
+          "example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "wrong_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "correct_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "code": "IO-01",
+          "kc_tags": "IO, VA",
+          "source": "Bayman&Mayer READ/DATA",
+          "distance": 0.636501,
+          "similarity": 0.363499
+        },
+        {
+          "rank": 5,
+          "id": "8e3e03be-6bea-441f-b546-c9214f29481b",
+          "description": "Student believes the counters of two nested loops with fixed numbers of repetitions should be multiplied together to determine the number of iterations, rather than understanding the inner loop repeats fully for each outer iteration.",
+          "example": "For an outer loop repeating 3 times and an inner loop repeating 2 times, student says 'so six times' when asked how many times a single inner-loop statement executes total, without tracing the nested structure.",
+          "wrong_example": "For an outer loop repeating 3 times and an inner loop repeating 2 times, student says 'so six times' when asked how many times a single inner-loop statement executes total, without tracing the nested structure.",
+          "correct_example": "For an outer loop repeating 3 times and an inner loop repeating 2 times, student says 'so six times' when asked how many times a single inner-loop statement executes total, without tracing the nested structure.",
+          "code": "LO-22",
+          "kc_tags": "LO",
+          "source": "Bastian&Mühling MC",
+          "distance": 0.647552,
+          "similarity": 0.352448
+        }
+      ]
+    }
+  ]
+}

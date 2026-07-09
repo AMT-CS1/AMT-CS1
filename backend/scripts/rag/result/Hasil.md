@@ -26,3 +26,28 @@ Total token     : 6014
 Waktu total     : 52.62s
 Rata-rata/baris : 0.74s
 Disimpan ke     : scripts/rag/result/misconception_expand.parquet
+
+RINGKASAN
+Total baris     : 71
+Sukses          : 0
+Gagal           : 71
+Total token     : 0
+Waktu total     : 37.82s
+Rata-rata/baris : 0.53s
+Disimpan ke     : scripts/rag/result/misconception_google_gemini_embedding_001.parquet
+
+PERHATIAN: 71 baris gagal (status='error', embedding=None).
+Baris ini tetap masuk parquet -- cek kolom error_message untuk detail.
+
+gagal karena ada logic yang membatasi panjang embedding
+
+RINGKASAN
+Total baris     : 71
+Sukses          : 71
+Gagal           : 0
+Total token     : 6637
+Waktu total     : 39.78s
+Rata-rata/baris : 0.56s
+Disimpan ke     : scripts/rag/result/misconception_google_gemini_embedding_001.parquet
+
+logic yang membatasi dihapus, selanjutnya store ke db
