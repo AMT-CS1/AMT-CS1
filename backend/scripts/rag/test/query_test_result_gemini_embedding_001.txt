@@ -1,0 +1,387 @@
+{
+  "model": "google/gemini-embedding-001",
+  "top_k": 5,
+  "generated_at": "2026-07-09T07:18:01.520749+00:00",
+  "results": [
+    {
+      "query": "Soal: Tulis program yang membaca sebuah bilangan bulat n, lalu menampilkan \"Genap\" jika n habis dibagi 2, atau \"Ganjil\" jika tidak.\n\nJawaban siswa:\nprogram CekGenapGanjil\nkamus\n    n : integer\nalgoritma\n    input(n)\n    if n mod 2 = 0 then\n        output(\"Genap\")\n    else\n        output(\"Ganjil\")\n    endif\nendprogram",
+      "query_embedding_meta": {
+        "token_count": 99,
+        "latency_ms": 831.78,
+        "status": "ok",
+        "error_message": null
+      },
+      "top_k": [
+        {
+          "rank": 1,
+          "id": "155c7dda-49a6-4796-8730-5b6aa2280907",
+          "description": "Student believes that Boolean expressions must be explicitly compared to True/False or wrapped in if/else before they can be used or returned.",
+          "example": "if (n > 0) == True or if n % 2 == 0: return True else return False.",
+          "wrong_example": "if (n > 0) == True or if n % 2 == 0: return True else return False.",
+          "correct_example": "if (n > 0) == True or if n % 2 == 0: return True else return False.",
+          "code": "EX-01",
+          "kc_tags": "CD, EX, OP",
+          "source": "McMining 4; McMining 26",
+          "distance": 0.284656,
+          "similarity": 0.715344
+        },
+        {
+          "rank": 2,
+          "id": "c3ef63b5-3550-4304-acc9-b0b290e6c3fd",
+          "description": "Student believes a conditional branch executes regardless of whether its condition is true.",
+          "example": "If x < 0 then output('negative'), student still expects the output when x is 5.",
+          "wrong_example": "If x < 0 then output('negative'), student still expects the output when x is 5.",
+          "correct_example": "If x < 0 then output('negative'), student still expects the output when x is 5.",
+          "code": "CD-03",
+          "kc_tags": "CD",
+          "source": "Sychev SEL1; Sychev SEL2; Bastian&Mühling EO",
+          "distance": 0.289443,
+          "similarity": 0.710557
+        },
+        {
+          "rank": 3,
+          "id": "dc82f1df-232f-49d6-9130-1cc712d640d8",
+          "description": "Student fails to recognize where a block ends, treating a statement after a sequence, selection, or loop as if it still belongs to that block.",
+          "example": "if x > 0 then output('A') endif; output('B'). Student thinks output('B') is part of the if-branch.",
+          "wrong_example": "if x > 0 then output('A') endif; output('B'). Student thinks output('B') is part of the if-branch.",
+          "correct_example": "if x > 0 then output('A') endif; output('B'). Student thinks output('B') is part of the if-branch.",
+          "code": "SQ-02",
+          "kc_tags": "SQ, CD, LO",
+          "source": "Sychev SEQ1; Sychev SEQ2; Sychev SEL7; Sychev LOOP4; Bastian&Mühling DT",
+          "distance": 0.296071,
+          "similarity": 0.703929
+        },
+        {
+          "rank": 4,
+          "id": "e7c42f90-89e6-4b50-87ea-376c5e5d1b07",
+          "description": "Student believes statements inside a sequence or block may execute in an order different from their written order.",
+          "example": "Given step 1: input x; step 2: y ← x + 1; step 3: output y, student expects output to occur before the assignment.",
+          "wrong_example": "Given step 1: input x; step 2: y ← x + 1; step 3: output y, student expects output to occur before the assignment.",
+          "correct_example": "Given step 1: input x; step 2: y ← x + 1; step 3: output y, student expects output to occur before the assignment.",
+          "code": "SQ-01",
+          "kc_tags": "SQ",
+          "source": "Sychev SEQ3",
+          "distance": 0.307178,
+          "similarity": 0.692822
+        },
+        {
+          "rank": 5,
+          "id": "51f8803d-758d-4480-ac09-f75668ed719e",
+          "description": "Student believes input or data statements directly print values or place values into memory without an explicit variable-receiving step.",
+          "example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "wrong_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "correct_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "code": "IO-01",
+          "kc_tags": "IO, VA",
+          "source": "Bayman&Mayer READ/DATA",
+          "distance": 0.310918,
+          "similarity": 0.689082
+        }
+      ]
+    },
+    {
+      "query": "Soal: Tulis program yang menerima nilai ujian (0-100) dan menampilkan grade: \"A\" jika >=90, \"B\" jika >=80, \"C\" jika >=70, selain itu \"D\".\n\nJawaban siswa:\nprogram HitungGrade\nkamus\n    nilai : integer\nalgoritma\n    input(nilai)\n    if nilai >= 90 then\n        output(\"A\")\n    endif\n    if nilai >= 80 then\n        output(\"B\")\n    endif\n    if nilai >= 70 then\n        output(\"C\")\n    endif\n    if nilai < 70 then\n        output(\"D\")\n    endif\nendprogram",
+      "query_embedding_meta": {
+        "token_count": 128,
+        "latency_ms": 602.7,
+        "status": "ok",
+        "error_message": null
+      },
+      "top_k": [
+        {
+          "rank": 1,
+          "id": "af93f0cb-7189-4919-8c1e-2b6a1ab2accd",
+          "description": "Student believes that multiple mutually exclusive conditions in a control-flow construct must each be written as separate if statements.",
+          "example": "Separate if statements for score >= 90, score >= 80, score >= 70, causing later assignments to overwrite earlier ones.",
+          "wrong_example": "Separate if statements for score >= 90, score >= 80, score >= 70, causing later assignments to overwrite earlier ones.",
+          "correct_example": "Separate if statements for score >= 90, score >= 80, score >= 70, causing later assignments to overwrite earlier ones.",
+          "code": "CD-01",
+          "kc_tags": "CD",
+          "source": "McMining 33",
+          "distance": 0.20568,
+          "similarity": 0.79432
+        },
+        {
+          "rank": 2,
+          "id": "dc82f1df-232f-49d6-9130-1cc712d640d8",
+          "description": "Student fails to recognize where a block ends, treating a statement after a sequence, selection, or loop as if it still belongs to that block.",
+          "example": "if x > 0 then output('A') endif; output('B'). Student thinks output('B') is part of the if-branch.",
+          "wrong_example": "if x > 0 then output('A') endif; output('B'). Student thinks output('B') is part of the if-branch.",
+          "correct_example": "if x > 0 then output('A') endif; output('B'). Student thinks output('B') is part of the if-branch.",
+          "code": "SQ-02",
+          "kc_tags": "SQ, CD, LO",
+          "source": "Sychev SEQ1; Sychev SEQ2; Sychev SEL7; Sychev LOOP4; Bastian&Mühling DT",
+          "distance": 0.256163,
+          "similarity": 0.743837
+        },
+        {
+          "rank": 3,
+          "id": "c3ef63b5-3550-4304-acc9-b0b290e6c3fd",
+          "description": "Student believes a conditional branch executes regardless of whether its condition is true.",
+          "example": "If x < 0 then output('negative'), student still expects the output when x is 5.",
+          "wrong_example": "If x < 0 then output('negative'), student still expects the output when x is 5.",
+          "correct_example": "If x < 0 then output('negative'), student still expects the output when x is 5.",
+          "code": "CD-03",
+          "kc_tags": "CD",
+          "source": "Sychev SEL1; Sychev SEL2; Bastian&Mühling EO",
+          "distance": 0.265294,
+          "similarity": 0.734706
+        },
+        {
+          "rank": 4,
+          "id": "bd89c7ce-385e-4e74-b3e2-fe2c7dec287a",
+          "description": "Student believes that an if/selection statement can repeat like a loop while its condition holds.",
+          "example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "wrong_example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "correct_example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "code": "CD-02",
+          "kc_tags": "CD, LO",
+          "source": "McMining 41; Sychev RECsl",
+          "distance": 0.278264,
+          "similarity": 0.721736
+        },
+        {
+          "rank": 5,
+          "id": "2cd3fb1b-f5ef-4489-ae96-10d2e1e8e553",
+          "description": "Student confuses printing a variable's value with printing the variable's name as literal text.",
+          "example": "If C stores 10, student expects output(C) to print the letter 'C' rather than 10.",
+          "wrong_example": "If C stores 10, student expects output(C) to print the letter 'C' rather than 10.",
+          "correct_example": "If C stores 10, student expects output(C) to print the letter 'C' rather than 10.",
+          "code": "IO-02",
+          "kc_tags": "IO, VA",
+          "source": "Bayman&Mayer PRINT",
+          "distance": 0.28469,
+          "similarity": 0.71531
+        }
+      ]
+    },
+    {
+      "query": "Soal: Tulis program yang menampilkan angka 1 sampai n menggunakan perulangan while, dengan n dibaca dari input.\n\nJawaban siswa:\nprogram TampilkanAngka\nkamus\n    n, i : integer\nalgoritma\n    input(n)\n    i <- 1\n    while i <= n do\n        output(i)\n    endwhile\nendprogram",
+      "query_embedding_meta": {
+        "token_count": 77,
+        "latency_ms": 660.12,
+        "status": "ok",
+        "error_message": null
+      },
+      "top_k": [
+        {
+          "rank": 1,
+          "id": "a42d7bc4-4250-4bc6-9838-1c79d62ae47d",
+          "description": "Student believes that while-loops execute their body only once if the condition is true.",
+          "example": "Student treats while user_input != \"done\" like a one-time if statement.",
+          "wrong_example": "Student treats while user_input != \"done\" like a one-time if statement.",
+          "correct_example": "Student treats while user_input != \"done\" like a one-time if statement.",
+          "code": "LO-05",
+          "kc_tags": "LO",
+          "source": "McMining 38",
+          "distance": 0.259639,
+          "similarity": 0.740361
+        },
+        {
+          "rank": 2,
+          "id": "bd89c7ce-385e-4e74-b3e2-fe2c7dec287a",
+          "description": "Student believes that an if/selection statement can repeat like a loop while its condition holds.",
+          "example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "wrong_example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "correct_example": "counter = 5; if counter > 0: counter = counter - 1; student expects counter to become 0 automatically.",
+          "code": "CD-02",
+          "kc_tags": "CD, LO",
+          "source": "McMining 41; Sychev RECsl",
+          "distance": 0.278294,
+          "similarity": 0.721706
+        },
+        {
+          "rank": 3,
+          "id": "abfcbb88-af7c-4dc5-8f12-9c3bcbdf1148",
+          "description": "Student believes that every while-loop can be converted into a for-loop.",
+          "example": "Student assumes all condition-controlled loops can be rewritten as count-controlled loops.",
+          "wrong_example": "Student assumes all condition-controlled loops can be rewritten as count-controlled loops.",
+          "correct_example": "Student assumes all condition-controlled loops can be rewritten as count-controlled loops.",
+          "code": "LO-08",
+          "kc_tags": "LO",
+          "source": "Qian 22",
+          "distance": 0.284859,
+          "similarity": 0.715141
+        },
+        {
+          "rank": 4,
+          "id": "9cfc08ad-38e9-40cb-80b4-8aae7b4af957",
+          "description": "Student believes that while-loops are better than for-loops.",
+          "example": "Student always prefers while-loop even when the number of repetitions is known.",
+          "wrong_example": "Student always prefers while-loop even when the number of repetitions is known.",
+          "correct_example": "Student always prefers while-loop even when the number of repetitions is known.",
+          "code": "LO-09",
+          "kc_tags": "LO",
+          "source": "Qian 23",
+          "distance": 0.285983,
+          "similarity": 0.714017
+        },
+        {
+          "rank": 5,
+          "id": "c28eb0f6-0143-4ce9-8494-e4ae6becce97",
+          "description": "Student believes a variable's value can only be used once, after which a new input value is automatically assigned.",
+          "example": "Student expects output(x) to consume x and make the next input value automatically become x.",
+          "wrong_example": "Student expects output(x) to consume x and make the next input value automatically become x.",
+          "correct_example": "Student expects output(x) to consume x and make the next input value automatically become x.",
+          "code": "IO-04",
+          "kc_tags": "IO, VA",
+          "source": "Haberman PriorityDriven3",
+          "distance": 0.288285,
+          "similarity": 0.711715
+        }
+      ]
+    },
+    {
+      "query": "Soal: Tulis program yang menukar isi dua variabel a dan b, sehingga setelah program berjalan a berisi nilai awal b dan b berisi nilai awal a.\n\nJawaban siswa:\nprogram TukarNilai\nkamus\n    a, b : integer\nalgoritma\n    input(a)\n    input(b)\n    b <- a\n    output(a)\n    output(b)\nendprogram",
+      "query_embedding_meta": {
+        "token_count": 81,
+        "latency_ms": 657.17,
+        "status": "ok",
+        "error_message": null
+      },
+      "top_k": [
+        {
+          "rank": 1,
+          "id": "91185de5-76ec-47ed-a9ec-7c0fba2527a0",
+          "description": "Assignment statements are commutative, i.e., A = B is equivalent to B = A.",
+          "example": "Student thinks A = B and B = A have the same effect.",
+          "wrong_example": "Student thinks A = B and B = A have the same effect.",
+          "correct_example": "Student thinks A = B and B = A have the same effect.",
+          "code": "VA-06",
+          "kc_tags": "VA, OP",
+          "source": "Qian 2",
+          "distance": 0.226334,
+          "similarity": 0.773666
+        },
+        {
+          "rank": 2,
+          "id": "51f8803d-758d-4480-ac09-f75668ed719e",
+          "description": "Student believes input or data statements directly print values or place values into memory without an explicit variable-receiving step.",
+          "example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "wrong_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "correct_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "code": "IO-01",
+          "kc_tags": "IO, VA",
+          "source": "Bayman&Mayer READ/DATA",
+          "distance": 0.243608,
+          "similarity": 0.756392
+        },
+        {
+          "rank": 3,
+          "id": "a301f010-be49-4d59-93ff-71adb9d973ef",
+          "description": "Student believes that when multiple input statements use the same variable, only the first input determines the variable's value.",
+          "example": "After input x reads 5 and input x reads 9, student expects x to remain 5.",
+          "wrong_example": "After input x reads 5 and input x reads 9, student expects x to remain 5.",
+          "correct_example": "After input x reads 5 and input x reads 9, student expects x to remain 5.",
+          "code": "IO-03",
+          "kc_tags": "IO, VA",
+          "source": "Haberman PriorityDriven2",
+          "distance": 0.245373,
+          "similarity": 0.754627
+        },
+        {
+          "rank": 4,
+          "id": "c28eb0f6-0143-4ce9-8494-e4ae6becce97",
+          "description": "Student believes a variable's value can only be used once, after which a new input value is automatically assigned.",
+          "example": "Student expects output(x) to consume x and make the next input value automatically become x.",
+          "wrong_example": "Student expects output(x) to consume x and make the next input value automatically become x.",
+          "correct_example": "Student expects output(x) to consume x and make the next input value automatically become x.",
+          "code": "IO-04",
+          "kc_tags": "IO, VA",
+          "source": "Haberman PriorityDriven3",
+          "distance": 0.250561,
+          "similarity": 0.749439
+        },
+        {
+          "rank": 5,
+          "id": "22512319-f95b-4b11-9ee6-b6f8f279849a",
+          "description": "Assigning the value of one variable to another variable links the two variables, so changing one also changes the other.",
+          "example": "After A = B, student thinks changing B later also changes A.",
+          "wrong_example": "After A = B, student thinks changing B later also changes A.",
+          "correct_example": "After A = B, student thinks changing B later also changes A.",
+          "code": "VA-08",
+          "kc_tags": "VA",
+          "source": "Qian 4",
+          "distance": 0.260261,
+          "similarity": 0.739739
+        }
+      ]
+    },
+    {
+      "query": "Soal: Tulis program yang membaca panjang dan lebar sebuah persegi panjang, lalu menampilkan luasnya.\n\nJawaban siswa:\nprogram HitungLuas\nkamus\n    panjang, lebar, luas : integer\nalgoritma\n    input(panjang)\n    output(luas)\n    input(lebar)\n    luas <- panjang * lebar\nendprogram",
+      "query_embedding_meta": {
+        "token_count": 76,
+        "latency_ms": 546.46,
+        "status": "ok",
+        "error_message": null
+      },
+      "top_k": [
+        {
+          "rank": 1,
+          "id": "51f8803d-758d-4480-ac09-f75668ed719e",
+          "description": "Student believes input or data statements directly print values or place values into memory without an explicit variable-receiving step.",
+          "example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "wrong_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "correct_example": "Given data 80, 90, 99 and read A, student expects the values to be printed instead of assigning the first data value to A.",
+          "code": "IO-01",
+          "kc_tags": "IO, VA",
+          "source": "Bayman&Mayer READ/DATA",
+          "distance": 0.259188,
+          "similarity": 0.740812
+        },
+        {
+          "rank": 2,
+          "id": "a301f010-be49-4d59-93ff-71adb9d973ef",
+          "description": "Student believes that when multiple input statements use the same variable, only the first input determines the variable's value.",
+          "example": "After input x reads 5 and input x reads 9, student expects x to remain 5.",
+          "wrong_example": "After input x reads 5 and input x reads 9, student expects x to remain 5.",
+          "correct_example": "After input x reads 5 and input x reads 9, student expects x to remain 5.",
+          "code": "IO-03",
+          "kc_tags": "IO, VA",
+          "source": "Haberman PriorityDriven2",
+          "distance": 0.262697,
+          "similarity": 0.737303
+        },
+        {
+          "rank": 3,
+          "id": "2c32a07f-3ea0-45a0-b8dc-3e5902e84347",
+          "description": "Student believes that variable identifiers can only be one letter long.",
+          "example": "Student uses l, w, a instead of length, width, area.",
+          "wrong_example": "Student uses l, w, a instead of length, width, area.",
+          "correct_example": "Student uses l, w, a instead of length, width, area.",
+          "code": "VA-03",
+          "kc_tags": "VA",
+          "source": "McMining 56",
+          "distance": 0.267655,
+          "similarity": 0.732345
+        },
+        {
+          "rank": 4,
+          "id": "cb3ac108-9516-4bd8-a619-fc40df8b7b00",
+          "description": "Student believes some statement types have special execution priority regardless of their position in the algorithm.",
+          "example": "Student expects an assignment statement to happen before an input statement even when the input statement is written first.",
+          "wrong_example": "Student expects an assignment statement to happen before an input statement even when the input statement is written first.",
+          "correct_example": "Student expects an assignment statement to happen before an input statement even when the input statement is written first.",
+          "code": "SQ-05",
+          "kc_tags": "SQ, IO, VA",
+          "source": "Haberman PriorityDriven1; Haberman PriorityDriven4",
+          "distance": 0.27746,
+          "similarity": 0.72254
+        },
+        {
+          "rank": 5,
+          "id": "c28eb0f6-0143-4ce9-8494-e4ae6becce97",
+          "description": "Student believes a variable's value can only be used once, after which a new input value is automatically assigned.",
+          "example": "Student expects output(x) to consume x and make the next input value automatically become x.",
+          "wrong_example": "Student expects output(x) to consume x and make the next input value automatically become x.",
+          "correct_example": "Student expects output(x) to consume x and make the next input value automatically become x.",
+          "code": "IO-04",
+          "kc_tags": "IO, VA",
+          "source": "Haberman PriorityDriven3",
+          "distance": 0.279437,
+          "similarity": 0.720563
+        }
+      ]
+    }
+  ]
+}

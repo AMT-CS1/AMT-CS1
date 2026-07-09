@@ -19,7 +19,7 @@ import httpx
 
 OPENROUTER_EMBEDDINGS_URL = "https://openrouter.ai/api/v1/embeddings"
 MODEL_ID = "google/gemini-embedding-001"
-EXPECTED_DIM = 1536
+EXPECTED_DIM = 3072
 
 # Retry sederhana: beberapa kali percobaan dengan jeda naik, untuk error
 # transient (timeout, rate limit, 5xx) -- bukan untuk error permanen (400/401/403).

@@ -50,4 +50,15 @@ Waktu total     : 39.78s
 Rata-rata/baris : 0.56s
 Disimpan ke     : scripts/rag/result/misconception_google_gemini_embedding_001.parquet
 
-logic yang membatasi dihapus, selanjutnya store ke db
+logic yang membatasi dihapus, selanjutnya store ke db maka yang terjadi adalah
+sqlalchemy.exc.DBAPIError: (sqlalchemy.dialects.postgresql.asyncpg.Error) <class 'asyncpg.exceptions.DataError'>: expected 1536 dimensions, not 3072
+
+Keputusan mustahil jika dimensi yang dihasilkan model lebih besar dari yang mampu di simpan vector
+Bisa saja menggunakan vector dengan dimensi yang lebih besar, tapi tidak bisa menggunakan pencarian dengan HNSW
+
+RINGKASAN
+Total query     : 5
+Total token     : 461
+Disimpan ke     : scripts/rag/test/query_test_result_gemini_embedding_001.txt
+
+hasil dari query test gemini embbeding
