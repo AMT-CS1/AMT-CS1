@@ -1,5 +1,10 @@
 'use client';
 
+// Halaman review buat rater/peneliti: nampilin daftar attempt siswa beserta
+// miskonsepsi yang kedeteksi otomatis sama backend (hasil diff AST), lengkap
+// dengan kode siswa, AST-nya, dan solusi referensi buat dibandingin manual.
+// Tujuannya buat validasi: bener gak sih deteksi otomatisnya?
+
 import { useState, useEffect } from 'react';
 import {
   AlertCircle, ArrowLeft, CheckCircle2, ChevronDown, ChevronRight,
@@ -9,12 +14,14 @@ import DapCodeEditor from '@/components/DapCodeEditor';
 import { Skeleton, SkeletonRows, SkeletonText } from '@/components/Skeleton';
 import AstPanel from './AstPanel';
 
+// Bentuknya sama persis kayak entri misconceptions yang disimpan backend
+// di row Attempt (lihat backend/app/core/misconception.py).
 interface Misconception {
-  code: string;
-  title: string;
-  description: string;
-  detail: string;
-  buggy_expr: string;
+  code: string;        // kode miskonsepsi, misal "VA-7", "OP-1", atau "GEN" kalau generik
+  title: string;       // judul singkat miskonsepsinya
+  description: string; // penjelasan kenapa ini salah kaprah
+  detail: string;      // detail teknis hasil diff (apa yang diharapkan vs yang ketemu)
+  buggy_expr: string;  // potongan kode siswa yang bermasalah
 }
 
 interface ReviewAttemptSummary {
@@ -76,6 +83,8 @@ function PassedPill({ passed }: { passed?: boolean | null }) {
   );
 }
 
+// Kartu-kartu miskonsepsi — tampilannya sengaja disamain sama yang dilihat
+// siswa di StudentWorkspace, biar rater menilai persis apa yang siswa lihat.
 function MisconceptionCards({ misconceptions }: { misconceptions: Misconception[] }) {
   if (misconceptions.length === 0) {
     return (

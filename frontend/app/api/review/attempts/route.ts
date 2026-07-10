@@ -1,3 +1,6 @@
+// Proxy khusus buat halaman review rater/peneliti (MisconceptionReview.tsx).
+// Nerusin ke backend GET /review/attempts, yang ngasih daftar attempt +
+// miskonsepsinya buat divalidasi manual.
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { apiFetch } from '@/lib/api';
@@ -12,7 +15,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Forward query params to backend
+    // Teruskan filter ke backend. Bedanya sama /api/attempts: di sini ada
+    // only_misconceptions, buat nyaring cuma attempt yang punya miskonsepsi.
     const params = new URLSearchParams();
     if (searchParams.get('user_id')) params.set('user_id', searchParams.get('user_id')!);
     if (searchParams.get('task_ref')) params.set('task_ref', searchParams.get('task_ref')!);

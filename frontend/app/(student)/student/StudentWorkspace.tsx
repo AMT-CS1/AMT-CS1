@@ -861,6 +861,11 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
 
       setEvalResult(data);
 
+      // Backend ngirim balik hasil analisis konsep bareng hasil evaluasi:
+      // - q_matrix: 7 slot (CO,VA,OP,EX,IO,CD,LO) konsep yang DIWAJIBKAN soal
+      // - p_matrix: konsep yang BENERAN muncul di kode siswa
+      // - matrix_similar: true kalau cosine similarity P vs Q >= 0.70
+      // Buat sekarang cuma di-log ke console buat debugging/riset.
       console.log('Submission concept matrix evaluation:', {
         q_matrix: data.q_matrix,
         p_matrix: data.p_matrix,
@@ -868,9 +873,9 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
         data: data
       });
 
-      // Wrong submission: immediately offer the hint quiz (Misconception Probe).
-      // Also shown when the quiz was completed before — students can retake it.
-      // Practicums are quiz-free: the focus is solely on solving the problems.
+      // Jawaban salah: langsung tawarin hint quiz (Misconception Probe).
+      // Tetep ditawarin walau kuisnya udah pernah diselesaikan — boleh diulang.
+      // Praktikum (mode 'lab') bebas kuis: fokusnya murni ngerjain soal.
       if (mode !== 'lab' && !(data.success && data.passed)) {
         setShowHintPrompt(true);
       }
@@ -1767,7 +1772,9 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
                     </div>
                   </div>
 
-                  {/* Misconceptions, if available */}
+                  {/* Miskonsepsi dari attempt terakhir (kalau ada) — tampil di mode
+                      review setelah deadline lewat, biar siswa bisa belajar dari
+                      kesalahannya walau udah gak bisa submit lagi. */}
                   {review.misconceptions && review.misconceptions.length > 0 && (
                     <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-3.5 space-y-2 mt-4">
                       <div className="flex items-center gap-1.5 text-amber-800 text-[10px] font-bold uppercase tracking-wider">
@@ -2190,7 +2197,10 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
                   </div>
                 )}
 
-                {/* Logic Hints: misconceptions detected by AST diff against the reference solution */}
+                {/* Logic Hints: daftar miskonsepsi hasil diff AST kode siswa vs solusi
+                    referensi di backend. Tiap kartu nampilin judul + kode miskonsepsi
+                    (misal VA-7, OP-1), penjelasannya, dan potongan kode yang bermasalah
+                    (buggy_expr). Sengaja TANPA jawaban benarnya — biar gak bocorin solusi. */}
                 {evalResult.misconceptions && evalResult.misconceptions.length > 0 && (
                   <div className="animate-slide-up-fade rounded-xl border border-amber-200 bg-amber-50/40 p-3 space-y-2">
                     <div className="flex items-center gap-1.5 text-amber-800">
@@ -2220,7 +2230,9 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
                   </div>
                 )}
 
-                {/* Hint Quiz (Misconception Probe) prompt — directly above the Verification Result */}
+                {/* Ajakan Hint Quiz (Misconception Probe) — muncul pas di atas hasil
+                    verifikasi tiap kali jawaban salah, ngajak siswa ngerjain kuis
+                    konsep singkat buat nemuin akar miskonsepsinya. */}
                 {showHintPrompt && (
                   <div className="animate-slide-up-fade rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50 to-violet-50 p-3 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-start sm:items-center space-x-2.5">

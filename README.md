@@ -34,10 +34,10 @@ docker-compose up -d --build
 ```
 This starts the backend, postgres, redis, and minio containers.
 
-### 3. Initialize the database
-If running the local supabase database container for the first time, initialize the required roles:
+### 3. Verify Database Status (Optional)
+The PostgreSQL/Supabase database container comes preconfigured with the necessary roles. You can verify it is ready to accept connections:
 ```bash
-docker exec amt-postgres psql -U postgres -d postgres -c "CREATE ROLE supabase_admin WITH SUPERUSER LOGIN PASSWORD 'postgres';"
+docker exec amt-postgres pg_isready -U postgres
 ```
 
 ### 4. Run Migrations
@@ -49,11 +49,12 @@ docker exec amt-backend alembic upgrade head
 ### 5. Seed the Database
 Populate the database with mock records for testing:
 ```bash
-docker exec amt-backend python seed.py
+docker exec amt-backend python scripts/seed_demo.py
 ```
 
 ## Service Access
 
+*   **Frontend UI**: http://localhost:3000
 *   **FastAPI API**: http://localhost:8000
 *   **OpenAPI Documentation**: http://localhost:8000/docs
 *   **MinIO Console**: http://localhost:9001 (Credentials: minioadmin / minioadmin)
