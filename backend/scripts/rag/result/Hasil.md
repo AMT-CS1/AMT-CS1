@@ -62,3 +62,25 @@ Total token     : 461
 Disimpan ke     : scripts/rag/test/query_test_result_gemini_embedding_001.txt
 
 hasil dari query test gemini embbeding
+
+RINGKASAN
+Total baris     : 71
+Sukses          : 71
+Gagal           : 0
+Total token     : 5902
+Waktu total     : 74.01s
+Rata-rata/baris : 1.04s
+Disimpan ke     : scripts/rag/result/misconception_3072_gemini_embedding_001.parquet
+
+embedding setelah dibenarkan fieldnya
+
+RINGKASAN
+Model            : openai/text-embedding-3-large (3072 dim)
+Total baris      : 418
+Sukses           : 418
+Gagal            : 0
+Total token      : 100304
+Estimasi biaya   : $0.013040
+Waktu total      : 408.48s
+Rata-rata/baris  : 0.98s
+Disimpan ke      : scripts/rag/result/query_openai_embedding_large.parquet

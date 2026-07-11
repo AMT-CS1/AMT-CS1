@@ -55,8 +55,8 @@ async def process_all(df: pd.DataFrame, api_key: str) -> list[dict]:
         description = str(row["Misconception"]).strip()
         code = str(row["Code"]).strip() if pd.notna(row["Code"]) else None
         example = str(row["Example"]) if pd.notna(row["Example"]) else None
-        wrong_example = str(row["Example"]) if pd.notna(row["Example"]) else None
-        correct_example = str(row["Example"]) if pd.notna(row["Example"]) else None
+        wrong_example = str(row["wrong_example"]) if pd.notna(row["wrong_example"]) else None
+        correct_example = str(row["wrong_example"]) if pd.notna(row["correct_example"]) else None
         kc_tags = str(row["Concept"]).strip() if pd.notna(row["Concept"]) else ""
         source = str(row["Source ID(s)"]).strip() if pd.notna(row["Source ID(s)"]) else ""
 
