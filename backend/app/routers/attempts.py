@@ -20,8 +20,10 @@ from app.models.attempt import Attempt
 from app.models.problem import Problem
 from app.models.target import WeeklyTarget
 from app.models.quiz_progress import QuizProgress
+from app.models.remediation import RemediationSession
+from app.core import remediation as rem
 from app.routers.targets import as_utc, now_utc
-from app.schemas.attempt import AttemptCreate, AttemptEvaluationResponse, AttemptResponse
+from app.schemas.attempt import AttemptCreate, AttemptEvaluationResponse, AttemptResponse, RemediationSummary
 
 
 # Router buat semua hal soal "attempt" = submission jawaban siswa.
@@ -159,6 +161,19 @@ async def create_attempt(
             raise HTTPException(
                 status_code=403,
                 detail="You have an active Intermediate Exercise quiz in progress. You must complete it before submitting homework attempts."
+            )
+
+        # Same gate for the misconception-remediation flow: a homework can't be
+        # re-submitted while there is an incomplete remediation session for it.
+        rem_stmt = select(RemediationSession).where(
+            and_(RemediationSession.user_id == user_id, RemediationSession.problem_key == attempt.task_ref)
+        )
+        rem_res = await db.execute(rem_stmt)
+        rem_session = rem_res.scalar_one_or_none()
+        if rem_session is not None and rem_session.completed_at is None:
+            raise HTTPException(
+                status_code=403,
+                detail="You have an active misconception remediation in progress. Clear it before submitting homework attempts."
             )
 
     # 1. Ambil data soal dari DB (bisa None kalau task_ref-nya gak kedaftar).
@@ -366,6 +381,27 @@ async def create_attempt(
         )
         db.add(misconception_log)
 
+    # Kick off (or refresh) the sequential misconception-remediation flow. Only for
+    # non-lab homework that failed and carries misconception tags. Tags are ordered
+    # by detection (e.g. LO then CD); an optional dummy SQ round can be appended for
+    # testing (REMEDIATION_DUMMY_SQ). See core/remediation.py.
+    remediation_summary = None
+    is_lab = db_target is not None and db_target.kind == "lab"
+    if not is_lab and not eval_result["passed"] and misconceptions:
+        rem_tags = rem.ordered_tags_from_misconceptions(misconceptions)
+        rem_session = await rem.upsert_session(db, user_id, attempt.task_ref, rem_tags)
+        if rem_session is not None:
+            await db.flush()  # ensure a freshly-added session is queryable before normalize
+            await rem.normalize_session(db, rem_session)
+            tags = list(rem_session.tags or [])
+            current_tag = tags[rem_session.current_index] if rem_session.current_index < len(tags) else None
+            remediation_summary = RemediationSummary(
+                active=rem_session.completed_at is None,
+                completed=rem_session.completed_at is not None,
+                tags=tags,
+                current_tag=current_tag,
+            )
+
     await db.commit()
     await db.refresh(db_attempt)
 
@@ -381,7 +417,8 @@ async def create_attempt(
         misconceptions=misconceptions,
         p_matrix=p_matrix,
         q_matrix=q_matrix,
-        matrix_similar=matrix_similar
+        matrix_similar=matrix_similar,
+        remediation=remediation_summary
     )
 
 @router.post("/speech", response_model=AttemptResponse, status_code=201)

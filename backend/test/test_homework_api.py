@@ -127,13 +127,13 @@ def test_hint_quiz_questions_caching():
                     assert "questions" in first_data
                     assert len(first_data["questions"]) == 3
                     
-                    first_q_text = first_data["questions"][0]["text"]
+                    first_q_text = first_data["questions"][0]["text_en"]
 
                     # Second call
                     second_res = await client.post("/exercises/generate", json=req_payload, headers=get_student_headers())
                     assert second_res.status_code == 200
                     second_data = second_res.json()
-                    assert second_data["questions"][0]["text"] == first_q_text
+                    assert second_data["questions"][0]["text_en"] == first_q_text
                     
                     # Verify in DB directly
                     stmt = select(HintQuizQuestion).where(HintQuizQuestion.problem_key == unique_key)

@@ -45,6 +45,14 @@ class MisconceptionSchema(BaseModel):
     detail: str
     buggy_expr: str
 
+class RemediationSummary(BaseModel):
+    """Lightweight remediation state returned with an attempt so the frontend can
+    enter the misconception-remediation flow immediately after submitting."""
+    active: bool = False
+    completed: bool = False
+    tags: List[str] = []
+    current_tag: Optional[str] = None
+
 class AttemptEvaluationResponse(BaseModel):
     attempt: AttemptResponse
     success: bool
@@ -56,4 +64,5 @@ class AttemptEvaluationResponse(BaseModel):
     p_matrix: Optional[List[int]] = None
     q_matrix: Optional[List[int]] = None
     matrix_similar: Optional[bool] = None
+    remediation: Optional[RemediationSummary] = None
 

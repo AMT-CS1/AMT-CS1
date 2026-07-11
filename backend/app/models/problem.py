@@ -6,7 +6,7 @@ from app.models.base import Base
 
 class Problem(Base):
     __tablename__ = "problems"
-    
+
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)

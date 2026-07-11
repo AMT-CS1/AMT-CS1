@@ -94,7 +94,7 @@ async def list_problems_by_kc(
     stmt = select(Problem)
     result = await db.execute(stmt)
     all_problems = result.scalars().all()
-    
+
     # Filter in Python since kc_tags is a comma-separated string
     matched = []
     for p in all_problems:

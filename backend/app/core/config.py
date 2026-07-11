@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     # LLM Settings
     LLM_PROVIDER: str = "dummy"
     LLM_API_KEY: str = "dummy-api-key"
+
+    # Remediation: when on, append a dummy SQ (Sequence) round to the misconception
+    # tag list whenever any misconception is detected. SQ has no automatic detector
+    # yet — this flag lets testers reach the SQ remediation round. Test-only.
+    REMEDIATION_DUMMY_SQ: bool = False
     
     # MinIO / S3 Settings
     MINIO_ENDPOINT: str = "localhost:9000"

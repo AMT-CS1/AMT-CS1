@@ -10,6 +10,7 @@ import {
   Mic, Square, Send, BrainCircuit
 } from 'lucide-react';
 import DapCodeEditor from '@/components/DapCodeEditor';
+import MisconceptionRemediation from '@/components/MisconceptionRemediation';
 import ProblemMarkdown from '@/components/ProblemMarkdown';
 import { Skeleton } from '@/components/Skeleton';
 import { KcInfo, getKcDisplayName, DEFAULT_STARTER_CODE } from '@/lib/kc-utils';
@@ -156,6 +157,8 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
   // Hint / Concept Check Quiz States
   const [showHintPrompt, setShowHintPrompt] = useState(false);
   const [inHintQuiz, setInHintQuiz] = useState(false);
+  // Sequential misconception-remediation overlay (tag-driven remedial coding problems).
+  const [showRemediation, setShowRemediation] = useState(false);
   const [quizLoading, setQuizLoading] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [quizIndex, setQuizIndex] = useState(0);
@@ -692,6 +695,21 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
 
       const taskRef = currentProblem.key;
 
+      // An in-progress misconception remediation takes precedence over the concept
+      // quiz — resume it and skip the quiz check entirely.
+      try {
+        const remRes = await fetch(`/api/remediation/status/${encodeURIComponent(taskRef)}`);
+        if (remRes.ok) {
+          const remData = await remRes.json();
+          if (remData.active) {
+            setShowRemediation(true);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch remediation status', err);
+      }
+
       if (quizFinishedKeys.includes(taskRef)) {
         return;
       }
@@ -873,10 +891,12 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
         data: data
       });
 
-      // Jawaban salah: langsung tawarin hint quiz (Misconception Probe).
-      // Tetep ditawarin walau kuisnya udah pernah diselesaikan — boleh diulang.
-      // Praktikum (mode 'lab') bebas kuis: fokusnya murni ngerjain soal.
-      if (mode !== 'lab' && !(data.success && data.passed)) {
+      // Kalau backend mendeteksi miskonsepsi bertag, masuk ke alur remediasi
+      // berurutan (soal remedial DAP per tag). Alur ini menggantikan tawaran hint
+      // quiz supaya dua alur remedial gak numpuk. Praktikum ('lab') bebas keduanya.
+      if (data.remediation && data.remediation.active) {
+        setShowRemediation(true);
+      } else if (mode !== 'lab' && !(data.success && data.passed)) {
         setShowHintPrompt(true);
       }
 
@@ -1918,6 +1938,14 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
 
   return (
     <div className="flex flex-col gap-3 lg:h-[calc(100vh-6rem)]">{/* 6rem = shell header (4rem) + main padding (1rem top + 1rem bottom) */}
+      {showRemediation && currentProblem && (
+        <MisconceptionRemediation
+          problemKey={currentProblem.key}
+          lang={(descLang === 'id' ? 'id' : 'en')}
+          onClose={() => setShowRemediation(false)}
+          onComplete={() => setShowRemediation(false)}
+        />
+      )}
       {/* Compact Header: back button, title, problems stepper, and progress in one bar */}
       <div className="bg-white rounded-xl border border-slate-200 px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="flex items-center space-x-2.5 min-w-0">

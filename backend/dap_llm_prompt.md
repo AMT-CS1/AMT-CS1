@@ -34,6 +34,7 @@ All variables and constants must be declared in the `dictionary` section before 
    * `integer` (defaults to `0`)
    * `real` (defaults to `0.0`)
    * `string` (defaults to `""`)
+   * `char` (defaults to `" "`, represents a single character)
 
 2. **Variable Declarations:**
    * Format: `var1, var2 : Type`
@@ -148,6 +149,10 @@ All variables and constants must be declared in the `dictionary` section before 
      endfor  // or 'end'
      ```
    * The `step stepValue` part is optional (defaults to `1`).
+   * Supports `downto` instead of `to` for counting downwards (step defaults to `-1`):
+     ```dap
+     for var <- startValue downto endValue do statement
+     ```
    * Single-line syntax:
      ```dap
      for var <- startValue to endValue do statement
@@ -159,6 +164,24 @@ All variables and constants must be declared in the `dictionary` section before 
      repeat
          // statements
      until condition
+     ```
+
+5. **Switch-Case (Depend On):**
+   * Style 1 (Value-based):
+     ```dap
+     depend on (varName)
+         value1 : statement
+         value2 : statement
+         default: statement
+     enddependon
+     ```
+   * Style 2 (Condition-based):
+     ```dap
+     depend on
+         a == 1 : statement
+         a == 2 : statement
+         default: statement
+     enddependon
      ```
 
 ---
@@ -207,6 +230,7 @@ All variables and constants must be declared in the `dictionary` section before 
 
 ### H. Array and Member Access
 * **Array element access:** `arrayVar[index]`
+* **String character access:** `stringVar[index]` (returns a character as a single-length string, 1-indexed)
 * **Struct member access:** `structVar.field`
 * **Assignment to array index:** `arrayVar[index] <- value`
 * **Assignment to struct member:** `structVar.field <- value`
