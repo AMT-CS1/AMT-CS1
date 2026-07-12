@@ -8,7 +8,9 @@ Run after the migration:
 
     python -m scripts.seed_misconception_questions
 
-Idempotent: upserts by (misconception_tag, text_en).
+Idempotent: upserts by (misconception_tag, text_en, code) — `code` is part of the
+key because different questions can share the same prompt text (e.g. two
+"what will be displayed?" trace questions with different pseudocode).
 """
 import sys
 import asyncio
@@ -232,6 +234,7 @@ async def main():
             res = await session.execute(select(MisconceptionQuestion).where(and_(
                 MisconceptionQuestion.misconception_tag == q["misconception_tag"],
                 MisconceptionQuestion.text_en == q["text_en"],
+                MisconceptionQuestion.code == q["code"],
             )))
             row = res.scalar_one_or_none()
             if row is None:

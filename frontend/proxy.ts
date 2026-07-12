@@ -10,7 +10,7 @@ const ROLE_ROUTES: { prefix: string; role: string }[] = [
   { prefix: '/rater', role: 'rater' },
 ];
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get('token')?.value;
 
@@ -70,7 +70,7 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Configure routes to run middleware on
+// Configure routes to run proxy on
 export const config = {
   matcher: [
     /*
