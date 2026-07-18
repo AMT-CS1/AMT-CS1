@@ -18,7 +18,7 @@ Cara pakai (dari dalam container/venv backend):
         --input scripts/rag/result/misconceptions.parquet
 
     # reset dulu (hapus semua isi tabel) sebelum seed ulang:
-    python scripts/rag/seed_rag.py --reset \
+    python scripts/seed_rag.py --reset \
         --input scripts/rag/result/misconceptions.parquet
 """
 import argparse

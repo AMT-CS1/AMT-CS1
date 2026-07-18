@@ -21,8 +21,8 @@ Dicatat per baris (untuk analisis kualitas & biaya):
 Cara pakai (dari dalam backend/, container atau venv):
     export OPEN_ROUTER_API_KEY=sk-or-...
     python scripts/build_misconception_embeddings.py \
-        --input scripts/data/bahan_rag.xlsx \
-        --output scripts/data/misconceptions.parquet
+        --input scripts/rag/data/bahan_rag.xlsx \
+        --output scripts/rag/data/misconceptions.parquet
 
 Kalau ada baris yang gagal (network/API error), script tetap lanjut ke baris
 berikutnya; baris gagal itu tetap masuk parquet dengan status="error" dan
@@ -116,7 +116,7 @@ def main():
         print(f"ERROR: file input tidak ditemukan: {args.input}", file=sys.stderr)
         sys.exit(1)
 
-    df = pd.read_excel(args.input)
+    df = pd.read_csv(args.input)
     required_cols = {"No", "Source ID(s)", "Concept", "Code", "Misconception", "Example", "Curation note", "wrong_example", "correct_example"}
     missing = required_cols - set(df.columns)
     if missing:
