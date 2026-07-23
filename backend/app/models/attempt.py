@@ -20,10 +20,10 @@ class Attempt(Base):
     ast_ref: Mapped[str | None] = mapped_column(String(255), nullable=True) # MinIO key of the compiled AST JSON
     misconceptions: Mapped[list | None] = mapped_column(JSONB, nullable=True) # AST-diff detection results
     # Origin of the attempt, denormalized from the WeeklyTarget it belonged to so
-    # reports can split Practice Workspace vs Practicum Session without re-joining
+    # reports can split Homework vs Checkpoint without re-joining
     # (and so the split survives a later edit to the target). Null on legacy rows
     # and on attempts made with no target → shown as "Uncategorized".
-    context: Mapped[str | None] = mapped_column(String(20), nullable=True) # practice, practicum
+    context: Mapped[str | None] = mapped_column(String(20), nullable=True) # practice (Homework), practicum (Checkpoint)
     target_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("weekly_targets.id", ondelete="SET NULL"), nullable=True
     )

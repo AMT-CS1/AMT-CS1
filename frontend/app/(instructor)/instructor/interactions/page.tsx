@@ -14,8 +14,8 @@ import type { AmtTeacherSummary, AmtStudentDetail } from '@/lib/amt-types';
 
 const CONTEXTS = [
   { key: '', label: 'All' },
-  { key: 'practice', label: 'Practice Workspace' },
-  { key: 'practicum', label: 'Practicum Session' },
+  { key: 'practice', label: 'Homework' },
+  { key: 'practicum', label: 'Checkpoint' },
 ];
 
 // ---------- student drill-down ----------
@@ -94,17 +94,17 @@ function StudentDetail({ userId, courseId, onBack }: { userId: string; courseId:
           <section className="space-y-3">
             <div className="flex items-center gap-2">
               <BookOpen className="h-4 w-4 text-teal-600" />
-              <h2 className="text-sm font-extrabold text-slate-800">Practice Workspace</h2>
+              <h2 className="text-sm font-extrabold text-slate-800">Homework</h2>
             </div>
-            <NativeBlock block={report.practice} emptyLabel="No Practice Workspace activity." />
+            <NativeBlock block={report.practice} emptyLabel="No Homework activity." />
           </section>
 
           <section className="space-y-3">
             <div className="flex items-center gap-2">
               <FlaskConical className="h-4 w-4 text-indigo-600" />
-              <h2 className="text-sm font-extrabold text-slate-800">Practicum Session</h2>
+              <h2 className="text-sm font-extrabold text-slate-800">Checkpoint</h2>
             </div>
-            <NativeBlock block={report.practicum} emptyLabel="No Practicum Session activity." />
+            <NativeBlock block={report.practicum} emptyLabel="No Checkpoint activity." />
           </section>
         </>
       ) : null}
@@ -165,7 +165,7 @@ export default function InteractionsPage() {
       <div>
         <h1 className="text-2xl font-extrabold text-slate-900">AMT-CS1 Interactions</h1>
         <p className="text-xs text-slate-500 mt-1">
-          In-tutor activity from the Practice Workspace and Practicum Sessions. Pick a class and workspace, or a student to drill in.
+          In-tutor activity from Homework and Checkpoints. Pick a class and workspace, or a student to drill in.
         </p>
       </div>
 
@@ -218,7 +218,7 @@ export default function InteractionsPage() {
           <Inbox className="h-8 w-8 text-slate-300 mx-auto mb-3" />
           <p className="text-sm font-semibold text-slate-500">No interaction data yet</p>
           <p className="text-xs text-slate-400 mt-1">
-            Students&apos; Practice Workspace and Practicum submissions will appear here.
+            Students&apos; Homework and Checkpoint submissions will appear here.
             {courses.length === 0 && ' Import an LMS export to group activity by class.'}
           </p>
         </div>

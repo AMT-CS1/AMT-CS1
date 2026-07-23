@@ -178,7 +178,7 @@ function LmsHistory() {
   );
 }
 
-// ---------- Native history (Practice Workspace / Practicum Session) ----------
+// ---------- Native history (Homework / Checkpoint) ----------
 
 function NativeHistory({ context }: { context: 'practice' | 'practicum' }) {
   const [report, setReport] = useState<AmtStudentReport | null>(null);
@@ -221,7 +221,7 @@ function NativeHistory({ context }: { context: 'practice' | 'practicum' }) {
   if (!report) return null;
 
   const block = context === 'practice' ? report.practice : report.practicum;
-  const label = context === 'practice' ? 'Practice Workspace' : 'Practicum Session';
+  const label = context === 'practice' ? 'Homework' : 'Checkpoint';
   return <NativeBlock block={block} emptyLabel={`No ${label} activity yet.`} />;
 }
 
@@ -229,8 +229,8 @@ function NativeHistory({ context }: { context: 'practice' | 'practicum' }) {
 
 const TABS = [
   { key: 'lms', label: 'LMS', icon: <History className="h-4 w-4" /> },
-  { key: 'practice', label: 'Practice Workspace', icon: <BookOpen className="h-4 w-4" /> },
-  { key: 'practicum', label: 'Practicum Session', icon: <FlaskConical className="h-4 w-4" /> },
+  { key: 'practice', label: 'Homework', icon: <BookOpen className="h-4 w-4" /> },
+  { key: 'practicum', label: 'Checkpoint', icon: <FlaskConical className="h-4 w-4" /> },
 ];
 
 export default function HistoryPage() {

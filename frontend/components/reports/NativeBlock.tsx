@@ -1,6 +1,6 @@
 'use client';
 
-// Renders one AMT-CS1 native activity block (a Practice or Practicum context):
+// Renders one AMT-CS1 native activity block (a Homework or Checkpoint context):
 // KPIs + concepts-to-review + per-problem attempt history with a lazy code viewer.
 // Shared by the student "My History" tabs and the teacher interaction drill-down.
 

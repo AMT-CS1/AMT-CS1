@@ -49,7 +49,7 @@ const toLocalInputValue = (dateStr: string): string => {
 
 export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homework' | 'lab' }) {
   const isPracticum = kind === 'lab';
-  const kindLabel = isPracticum ? 'Practicum' : 'Homework';
+  const kindLabel = isPracticum ? 'Checkpoint' : 'Homework';
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [kcList, setKcList] = useState<KcInfo[]>([]);
@@ -199,18 +199,18 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
 
     if (kind === 'lab') {
       if (!startsAt) {
-        setError('Practicum sessions require a start time.');
+        setError('Checkpoints require a start time.');
         setSubmitting(false);
         return;
       }
       if (!accessPassword.trim()) {
-        setError('Practicum sessions require an access password to share in class.');
+        setError('Checkpoints require an access password to share in class.');
         setSubmitting(false);
         return;
       }
     }
 
-    // Practicums default to a 100-minute window when no explicit deadline is set
+    // Checkpoints default to a 100-minute window when no explicit deadline is set
     let effectiveDeadline = deadline ? new Date(deadline).toISOString() : null;
     if (kind === 'lab' && !effectiveDeadline && startsAt) {
       effectiveDeadline = new Date(new Date(startsAt).getTime() + LAB_DURATION_MINUTES * 60000).toISOString();
@@ -272,7 +272,7 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
                 Current {kindLabel} Schedule ({homeworks.length})
               </h2>
               <p className="text-[10px] text-slate-405 mt-0.5">
-                {isPracticum ? 'Scheduled in-class practicum sessions per week' : 'Assigned coding homework tasks per week'}
+                {isPracticum ? 'Scheduled in-class checkpoints per week' : 'Assigned coding homework tasks per week'}
               </p>
             </div>
             <button 
@@ -288,7 +288,7 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
             <SkeletonCardGrid cards={4} />
           ) : homeworks.length === 0 ? (
             <p className="text-xs text-slate-400 py-6 text-center font-medium">
-              {isPracticum ? 'No practicum sessions currently scheduled.' : 'No homeworks currently assigned.'}
+              {isPracticum ? 'No checkpoints currently scheduled.' : 'No homeworks currently assigned.'}
             </p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -323,7 +323,7 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
                           <div className="flex flex-wrap items-center gap-1.5 mt-2">
                             {hw.kind === 'lab' && (
                               <span className="inline-flex items-center gap-1 text-[9px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full font-bold">
-                                <FlaskConical className="h-2.5 w-2.5" /> Practicum
+                                <FlaskConical className="h-2.5 w-2.5" /> Checkpoint
                                 {hw.starts_at && (
                                   <span className="font-semibold">
                                     · {new Date(hw.starts_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
@@ -492,7 +492,7 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
             <div className="rounded-lg border border-amber-100 bg-amber-50/40 p-3 flex items-start space-x-2">
               <FlaskConical className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-600" />
               <p className="text-[10px] text-slate-600">
-                Practicum sessions are locked until the start time, require the in-class password, have no concept-check quizzes, and auto-grade at the deadline.
+                Checkpoints are locked until the start time, require the in-class password, have no concept-check quizzes, and auto-grade at the deadline.
               </p>
             </div>
           )}

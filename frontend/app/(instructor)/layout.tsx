@@ -46,7 +46,7 @@ export default async function InstructorLayout({
               className="flex items-center space-x-3 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
             >
               <FlaskConical className="h-4.5 w-4.5" />
-              <span>Practicum</span>
+              <span>Checkpoint</span>
             </Link>
             <Link
               href="/instructor/problems"

@@ -1,13 +1,13 @@
 """Read-side aggregation for the AMT-CS1 native interaction reports.
 
 The in-tutor counterpart to `lms_reports.py`: all numbers come from the
-`attempts` table (Practice Workspace / Practicum Session submissions) plus
+`attempts` table (Homework / Checkpoint submissions) plus
 `remediation_sessions`, aggregated at request time. Class scoping reuses the
 LMS enrollment roster (see `resolve_course_student_user_ids` in `lms_reports`),
 so an AMT-CS1 report is class-aware once an LMS export has been imported.
 
-`attempts.context` splits the two workspaces: "practice" (homework) vs
-"practicum" (lab). Legacy rows with a NULL context predate this column and are
+`attempts.context` splits the two workspaces: "practice" (Homework) vs
+"practicum" (Checkpoint). Legacy rows with a NULL context predate this column and are
 excluded from both blocks (no backfill, per plan D2).
 """
 from collections import defaultdict
