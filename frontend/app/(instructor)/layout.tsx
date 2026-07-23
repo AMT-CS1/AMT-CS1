@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { decodeJwt } from '@/lib/auth';
 import SignOutButton from '@/components/SignOutButton';
-import { ClipboardCheck, BarChart3, Users, GraduationCap, Code, FileText, FlaskConical } from 'lucide-react';
+import { ClipboardCheck, BarChart3, Users, GraduationCap, Code, FileText, FlaskConical, Cpu } from 'lucide-react';
 import Link from 'next/link';
 
 export default async function InstructorLayout({
@@ -69,13 +69,20 @@ export default async function InstructorLayout({
               <Users className="h-4.5 w-4.5" />
               <span>Student Rosters (Soon)</span>
             </div>
-            <div
-              className="flex items-center space-x-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-450 cursor-not-allowed select-none"
-              title="Coming soon"
+            <Link
+              href="/instructor/reports"
+              className="flex items-center space-x-3 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
             >
               <BarChart3 className="h-4.5 w-4.5" />
-              <span>Analytics (Soon)</span>
-            </div>
+              <span>LMS Reports</span>
+            </Link>
+            <Link
+              href="/instructor/interactions"
+              className="flex items-center space-x-3 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+            >
+              <Cpu className="h-4.5 w-4.5" />
+              <span>AMT-CS1 Interactions</span>
+            </Link>
           </nav>
         </div>
 

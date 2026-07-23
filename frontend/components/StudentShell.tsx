@@ -16,6 +16,7 @@ export default function StudentShell({
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const pathname = usePathname();
   const inPracticum = pathname?.startsWith('/student/practicum');
+  const inHistory = pathname?.startsWith('/student/history');
 
   const navLinkClass = (active: boolean) =>
     active
@@ -45,7 +46,7 @@ export default function StudentShell({
 
           {/* Navigation Links */}
           <nav className="space-y-1.5">
-            <Link href="/student" className={navLinkClass(!inPracticum)}>
+            <Link href="/student" className={navLinkClass(!inPracticum && !inHistory)}>
               <BookOpen className="h-4.5 w-4.5" />
               <span>Practice Workspace</span>
             </Link>
@@ -53,13 +54,10 @@ export default function StudentShell({
               <FlaskConical className="h-4.5 w-4.5" />
               <span>Practicum Session</span>
             </Link>
-            <div
-              className="flex items-center space-x-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-450 cursor-not-allowed select-none"
-              title="Coming soon"
-            >
+            <Link href="/student/history" className={navLinkClass(!!inHistory)}>
               <History className="h-4.5 w-4.5" />
-              <span>My History (Soon)</span>
-            </div>
+              <span>My History</span>
+            </Link>
           </nav>
         </div>
 

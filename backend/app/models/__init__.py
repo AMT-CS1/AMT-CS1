@@ -15,6 +15,16 @@ from app.models.quiz_progress import QuizProgress
 from app.models.feedback import Feedback
 from app.models.remediation import RemediationSession
 from app.models.misconception_question import MisconceptionQuestion
+from app.models.lms import (
+    LmsImport,
+    LmsCourse,
+    LmsParticipant,
+    LmsQuiz,
+    LmsQuestion,
+    LmsAttempt,
+    LmsAttemptAnswer,
+    LmsResponseStep,
+)
 
 __all__ = [
     "Base",
@@ -33,6 +43,14 @@ __all__ = [
     "QuizProgress",
     "Feedback",
     "RemediationSession",
-    "MisconceptionQuestion"
+    "MisconceptionQuestion",
+    "LmsImport",
+    "LmsCourse",
+    "LmsParticipant",
+    "LmsQuiz",
+    "LmsQuestion",
+    "LmsAttempt",
+    "LmsAttemptAnswer",
+    "LmsResponseStep",
 ]
 
