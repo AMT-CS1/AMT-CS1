@@ -15,6 +15,15 @@ from app.models.quiz_progress import QuizProgress
 from app.models.feedback import Feedback
 from app.models.remediation import RemediationSession
 from app.models.misconception_question import MisconceptionQuestion
+from app.models.homework_workflow import (
+    ProblemMisconception,
+    StudentHomeworkProgress,
+    StudentMPSession,
+    StudentMPAttempt,
+    StudentMisconceptionRecord,
+    XlsxUpload,
+    WeeklyClassSummaryReport
+)
 
 __all__ = [
     "Base",
@@ -33,6 +42,14 @@ __all__ = [
     "QuizProgress",
     "Feedback",
     "RemediationSession",
-    "MisconceptionQuestion"
+    "MisconceptionQuestion",
+    "ProblemMisconception",
+    "StudentHomeworkProgress",
+    "StudentMPSession",
+    "StudentMPAttempt",
+    "StudentMisconceptionRecord",
+    "XlsxUpload",
+    "WeeklyClassSummaryReport"
 ]
+
 

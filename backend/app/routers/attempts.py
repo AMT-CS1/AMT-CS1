@@ -5,7 +5,7 @@ import anyio
 import math
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 from typing import List, Optional
 
 from app.core.security import RoleChecker
@@ -21,9 +21,12 @@ from app.models.problem import Problem
 from app.models.target import WeeklyTarget
 from app.models.quiz_progress import QuizProgress
 from app.models.remediation import RemediationSession
+from app.models.homework_workflow import ProblemMisconception, StudentHomeworkProgress, StudentMisconceptionRecord
 from app.core import remediation as rem
 from app.routers.targets import as_utc, now_utc
+from app.routers.homework_workflow import matched_problems_for_target, upsert_class_summary
 from app.schemas.attempt import AttemptCreate, AttemptEvaluationResponse, AttemptResponse, RemediationSummary
+
 
 
 # Router buat semua hal soal "attempt" = submission jawaban siswa.
@@ -333,6 +336,83 @@ async def create_attempt(
         misconceptions=misconceptions
     )
     db.add(db_attempt)
+
+    # Logging: student misconception records (1 if triggered, 0 if not)
+    if db_problem is not None:
+        try:
+            # Fetch misconception tags mapped to this problem
+            p_misc_stmt = select(ProblemMisconception.misconception_tag).where(ProblemMisconception.problem_id == db_problem.id)
+            p_misc_res = await db.execute(p_misc_stmt)
+            problem_tags = [row[0] for row in p_misc_res.all()]
+            
+            detected_codes = [m.get("code", "") for m in (misconceptions or [])]
+            
+            for tag in problem_tags:
+                triggered = 0
+                for code in detected_codes:
+                    if code == tag or code.startswith(tag + "-") or code.split("-")[0] == tag:
+                        triggered = 1
+                        break
+                
+                misc_record = StudentMisconceptionRecord(
+                    id=uuid.uuid4(),
+                    user_id=uuid.UUID(current_user["id"]),
+                    problem_id=db_problem.id,
+                    attempt_id=db_attempt.id,
+                    misconception_tag=tag,
+                    triggered=triggered
+                )
+                db.add(misc_record)
+        except Exception as log_err:
+            logging.getLogger(__name__).error("Failed to log student misconception records: %s", log_err)
+
+    # Progress Tracking: Update Homework PS progress status
+    if db_target is not None:
+        try:
+            progress_stmt = select(StudentHomeworkProgress).where(
+                and_(
+                    StudentHomeworkProgress.user_id == uuid.UUID(current_user["id"]),
+                    StudentHomeworkProgress.weekly_target_id == db_target.id
+                )
+            )
+            progress_res = await db.execute(progress_stmt)
+            progress = progress_res.scalar_one_or_none()
+            
+            if progress is not None:
+                if progress.ps_status == "locked":
+                    progress.ps_status = "in_progress"
+                if progress.ps_status == "not_started":
+                    progress.ps_status = "in_progress"
+                    progress.ps_started_at = func.now()
+                
+                if db_attempt.passed:
+                    # Fetch all problems for target
+                    problems_stmt = select(Problem)
+                    all_probs_res = await db.execute(problems_stmt)
+                    all_probs = all_probs_res.scalars().all()
+                    matched_keys = [p.key for p in matched_problems_for_target(db_target, all_probs)]
+                    
+                    solved_stmt = select(Attempt.task_ref).where(
+                        and_(
+                            Attempt.user_id == uuid.UUID(current_user["id"]),
+                            Attempt.passed == True,
+                            Attempt.task_ref.in_(matched_keys)
+                        )
+                    ).distinct()
+                    solved_res = await db.execute(solved_stmt)
+                    solved_keys = {row[0] for row in solved_res.all()}
+                    solved_keys.add(db_attempt.task_ref)
+                    
+                    if len(solved_keys) >= len(matched_keys):
+                        progress.ps_status = "completed"
+                        progress.ps_completed_at = func.now()
+                        
+            await db.flush()
+            # Pre-aggregate summary report
+            await upsert_class_summary(db, uuid.UUID(current_user["id"]), db_target.id)
+        except Exception as target_err:
+            logging.getLogger(__name__).error("Failed to update student homework progress: %s", target_err)
+
 
     # Submission yang lulus disimpan jadi solusi referensi baru — makin banyak
     # variasi jawaban benar, makin adil deteksi miskonsepsi buat siswa berikutnya.
