@@ -100,12 +100,28 @@ TEACHER = (59001, "DOSEN", "PENGAMPU")
 # their Moodle username/email, or run scripts/seed_lms_teacher.py afterwards.
 TEACHER_LOCAL_USERNAME = "instructor_user"
 
+# One mock student doubles as the seeded local test login `student_user`: we emit
+# their Username as that local username so the importer auto-links this LMS student
+# to the `student_user` account (Email stays a realistic Telkom address for display).
+# Mirrors TEACHER_LOCAL_USERNAME — matching is on Username OR Email (see
+# `_match_participants` in app/core/lms_import.py). After import the student
+# "My History" view (`GET /lms/summary/student`) lights up for student_user with no
+# seed_lms_demo.py step. Attempts join by User_ID, so this student's full history
+# surfaces under the test account automatically.
+STUDENT_LOCAL_USERNAME = "student_user"
+TEST_STUDENT_UID = 50003  # BUDI SANTOSO — mid skill → several attempts + visible misconceptions
+
 QUIZ_OPEN = datetime(2025, 9, 15, 8, 0, 0)
 QUIZ_CLOSE = datetime(2025, 12, 20, 23, 59, 0)
 
 
 def email(first, last):
     return f"{first.lower()}{last.lower().replace(' ', '')}@student.telkomuniversity.ac.id"
+
+
+def student_username(uid, e):
+    """The designated test student surfaces as `student_user`; others use their email."""
+    return STUDENT_LOCAL_USERNAME if uid == TEST_STUDENT_UID else e
 
 
 def teacher_email(first, last):
@@ -131,7 +147,8 @@ def build(path):
                     teacher_email(tf, tl), "Teacher", "editingteacher"])
     for uid, first, last, _ in STUDENTS:
         e = email(first, last)
-        ws_part.append([COURSE_ID, COURSE_NAME, uid, e, first, last, e, "Student", "student"])
+        ws_part.append([COURSE_ID, COURSE_NAME, uid, student_username(uid, e), first, last, e,
+                        "Student", "student"])
 
     ws_quiz = wb.create_sheet("QUIZ_LIST")
     ws_quiz.append(["Course_ID", "Course_Name", "Quiz_ID", "Quiz_Name", "Open_Time",
@@ -166,6 +183,7 @@ def build(path):
 
     for uid, first, last, skill in STUDENTS:
         e = email(first, last)
+        un = student_username(uid, e)  # `student_user` for the test student, else the email
         for qid, qname, tags, maxg in QUIZZES:
             n_attempts = 1 + (1 if skill < 0.6 else 0) + (1 if rng.random() < 0.35 else 0)
             start_day = QUIZ_OPEN + timedelta(days=rng.randint(0, 80))
@@ -191,7 +209,7 @@ def build(path):
                 a_finish = a_start + timedelta(minutes=rng.randint(6, 40))
 
                 for slot, tag, name, text, right, answer, state, grade in slot_results:
-                    ws_pa.append([COURSE_ID, COURSE_NAME, qid, qname, uid, e, first, last, e,
+                    ws_pa.append([COURSE_ID, COURSE_NAME, qid, qname, uid, un, first, last, e,
                                   attempt, a_start, a_finish, total_grade, slot,
                                   text, right, answer, state, grade])
 
@@ -199,14 +217,14 @@ def build(path):
                     first_line = answer.split("\n")[0]
                     t0 = a_start + timedelta(minutes=slot * 2)
                     t1 = t0 + timedelta(minutes=rng.randint(1, 4))
-                    ws_rh.append([COURSE_ID, COURSE_NAME, qid, qname, uid, e, first, last, e,
+                    ws_rh.append([COURSE_ID, COURSE_NAME, qid, qname, uid, un, first, last, e,
                                   attempt, slot, question_id, 1, a_start, "Started",
                                   "Not complete", None, None])
-                    ws_rh.append([COURSE_ID, COURSE_NAME, qid, qname, uid, e, first, last, e,
+                    ws_rh.append([COURSE_ID, COURSE_NAME, qid, qname, uid, un, first, last, e,
                                   attempt, slot, question_id, 2, t0, f"Submit: {first_line}",
                                   "Complete", grade,
                                   "All tests passed" if grade > 0 else "2 of 3 tests failed"])
-                    ws_rh.append([COURSE_ID, COURSE_NAME, qid, qname, uid, e, first, last, e,
+                    ws_rh.append([COURSE_ID, COURSE_NAME, qid, qname, uid, un, first, last, e,
                                   attempt, slot, question_id, 3, t1,
                                   "Attempt finished submitting: {$a}",
                                   "Correct" if grade > 0 else "Incorrect", grade,
