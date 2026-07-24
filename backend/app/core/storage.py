@@ -34,6 +34,19 @@ async def upload_text_to_minio(key: str, body: str, content_type: str = "text/pl
         return key
     return await anyio.to_thread.run_sync(_upload)
 
+async def upload_bytes_to_minio(key: str, body: bytes, content_type: str = "application/octet-stream") -> str:
+    """Upload a binary object; raises on failure."""
+    def _upload():
+        s3 = get_s3_client()
+        s3.put_object(
+            Bucket=settings.MINIO_BUCKET_NAME,
+            Key=key,
+            Body=body,
+            ContentType=content_type,
+        )
+        return key
+    return await anyio.to_thread.run_sync(_upload)
+
 async def list_minio_keys(prefix: str) -> list[str]:
     """List object keys under a prefix (empty list on failure)."""
     def _list():

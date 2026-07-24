@@ -16,6 +16,7 @@ export default function StudentShell({
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const pathname = usePathname();
   const inPracticum = pathname?.startsWith('/student/practicum');
+  const inHistory = pathname?.startsWith('/student/history');
 
   const navLinkClass = (active: boolean) =>
     active
@@ -45,21 +46,18 @@ export default function StudentShell({
 
           {/* Navigation Links */}
           <nav className="space-y-1.5">
-            <Link href="/student" className={navLinkClass(!inPracticum)}>
+            <Link href="/student" className={navLinkClass(!inPracticum && !inHistory)}>
               <BookOpen className="h-4.5 w-4.5" />
-              <span>Practice Workspace</span>
+              <span>Homework</span>
             </Link>
             <Link href="/student/practicum" className={navLinkClass(!!inPracticum)}>
               <FlaskConical className="h-4.5 w-4.5" />
-              <span>Practicum Session</span>
+              <span>Checkpoint</span>
             </Link>
-            <div
-              className="flex items-center space-x-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-450 cursor-not-allowed select-none"
-              title="Coming soon"
-            >
+            <Link href="/student/history" className={navLinkClass(!!inHistory)}>
               <History className="h-4.5 w-4.5" />
-              <span>My History (Soon)</span>
-            </div>
+              <span>My History</span>
+            </Link>
           </nav>
         </div>
 
@@ -93,7 +91,7 @@ export default function StudentShell({
             >
               {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
             </button>
-            <h2 className="text-lg font-bold text-slate-800 tracking-wide">Practice Workspace</h2>
+            <h2 className="text-lg font-bold text-slate-800 tracking-wide">Homework</h2>
           </div>
           <div className="flex items-center space-x-4">
           </div>

@@ -31,5 +31,5 @@ minio_data/
 .agent/
 backend/dap
 backend/dap.exe
-
+.claude/
 ListKC.pdf

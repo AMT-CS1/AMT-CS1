@@ -323,6 +323,12 @@ async def create_attempt(
 
     # 6. Simpan detail attempt ke Postgres. Kode & AST-nya sendiri ada di
     # MinIO — di sini cuma pointer-nya (content_ref, ast_ref) + hasil analisis.
+    # Origin marker: "practicum" for lab targets, "practice" for homework; None
+    # when the attempt carries no target (kept as "Uncategorized" in reports).
+    attempt_context = None
+    if db_target is not None:
+        attempt_context = "practicum" if db_target.kind == "lab" else "practice"
+
     db_attempt = Attempt(
         id=attempt_id,
         user_id=uuid.UUID(current_user["id"]),
@@ -333,7 +339,9 @@ async def create_attempt(
         confidence_level=attempt.confidence_level,
         passed=eval_result["passed"],
         ast_ref=ast_ref,
-        misconceptions=misconceptions
+        misconceptions=misconceptions,
+        context=attempt_context,
+        target_id=attempt.target_id,
     )
     db.add(db_attempt)
 

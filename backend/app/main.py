@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.redis import get_redis
 from app.core.storage import init_storage
-from app.routers import auth, attempts, tutoring, exercises, students, targets, review, internal, problems, kcs, student_logs, remediation, homework_workflow
+from app.routers import auth, attempts, tutoring, exercises, students, targets, review, internal, problems, kcs, student_logs, remediation, homework_workflow, lms_reports, amt_reports
 
 import anyio
 
@@ -86,4 +86,5 @@ app.include_router(kcs.router)
 app.include_router(student_logs.router)
 app.include_router(remediation.router)
 app.include_router(homework_workflow.router)
-
+app.include_router(lms_reports.router)
+app.include_router(amt_reports.router)

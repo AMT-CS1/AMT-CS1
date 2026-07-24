@@ -24,6 +24,16 @@ from app.models.homework_workflow import (
     XlsxUpload,
     WeeklyClassSummaryReport
 )
+from app.models.lms import (
+    LmsImport,
+    LmsCourse,
+    LmsParticipant,
+    LmsQuiz,
+    LmsQuestion,
+    LmsAttempt,
+    LmsAttemptAnswer,
+    LmsResponseStep,
+)
 
 __all__ = [
     "Base",
@@ -49,7 +59,15 @@ __all__ = [
     "StudentMPAttempt",
     "StudentMisconceptionRecord",
     "XlsxUpload",
-    "WeeklyClassSummaryReport"
+    "WeeklyClassSummaryReport",
+    "LmsImport",
+    "LmsCourse",
+    "LmsParticipant",
+    "LmsQuiz",
+    "LmsQuestion",
+    "LmsAttempt",
+    "LmsAttemptAnswer",
+    "LmsResponseStep",
 ]
 
 
