@@ -1,9 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Calendar, AlertCircle, CheckCircle, RefreshCw, Pencil, Trash2, Shuffle, Plus, X, FlaskConical, KeyRound, Clock } from 'lucide-react';
+import { Calendar, AlertCircle, CheckCircle, RefreshCw, Pencil, Trash2, Shuffle, Plus, X, FlaskConical, KeyRound, Clock, FileSpreadsheet, BarChart3 } from 'lucide-react';
 import { KcInfo, getKcDisplayName } from '@/lib/kc-utils';
 import { SkeletonCardGrid } from '@/components/Skeleton';
+import XlsxUploadModal from '@/components/homework/XlsxUploadModal';
+import HomeworkAnalyticsView from '@/components/homework/HomeworkAnalyticsView';
+
 
 interface TestCase {
   input: string;
@@ -73,6 +76,11 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingHomework, setEditingHomework] = useState<Homework | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // XLSX Upload & Analytics View states
+  const [isXlsxModalOpen, setIsXlsxModalOpen] = useState(false);
+  const [analyticsTarget, setAnalyticsTarget] = useState<{ id: string; title: string; week: number } | null>(null);
+
 
   // Count matching problems for selected KCs
   const matchingProblemCount = problems.filter(p => {
@@ -261,6 +269,17 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
     }
   };
 
+  if (analyticsTarget) {
+    return (
+      <HomeworkAnalyticsView
+        weeklyTargetId={analyticsTarget.id}
+        targetTitle={analyticsTarget.title}
+        weekNumber={analyticsTarget.week}
+        onBack={() => setAnalyticsTarget(null)}
+      />
+    );
+  }
+
   return (
     <div className="relative">
       {/* List of Configured Homeworks (Full-width) */}
@@ -275,14 +294,24 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
                 {isPracticum ? 'Scheduled in-class checkpoints per week' : 'Assigned coding homework tasks per week'}
               </p>
             </div>
-            <button 
-              onClick={fetchData}
-              className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
-              title="Refresh"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setIsXlsxModalOpen(true)}
+                className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold transition-all flex items-center space-x-1.5 shadow-sm"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                <span>Upload XLSX Workbook</span>
+              </button>
+              <button 
+                onClick={fetchData}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
+                title="Refresh"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
           </div>
+
 
           {loading ? (
             <SkeletonCardGrid cards={4} />
@@ -350,53 +379,69 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
                         </div>
                       </div>
                       
-                      <div className="flex flex-col items-end space-y-1.5 shrink-0">
-                        <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 rounded-full font-bold">
+                      <div className="flex items-center space-x-2 shrink-0">
+                        <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1 rounded-full font-bold">
                           Published
                         </span>
                         
                         {confirmDeleteId === hw.id ? (
-                          <div className="flex items-center space-x-1 mt-1">
+                          <div className="flex items-center space-x-1">
                             <span className="text-[9px] text-rose-600 font-bold mr-1">Delete?</span>
                             <button
                               onClick={() => handleDelete(hw.id)}
-                              className="px-1.5 py-0.5 bg-rose-600 text-white rounded text-[9px] font-bold hover:bg-rose-700 transition-colors"
+                              className="px-2 py-0.5 bg-rose-600 text-white rounded text-[9px] font-bold hover:bg-rose-700 transition-colors"
                             >
                               Yes
                             </button>
                             <button
                               onClick={() => setConfirmDeleteId(null)}
-                              className="px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded text-[9px] font-bold hover:bg-slate-350 transition-colors"
+                              className="px-2 py-0.5 bg-slate-200 text-slate-700 rounded text-[9px] font-bold hover:bg-slate-300 transition-colors"
                             >
                               No
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-center space-x-1.5">
+                          <div className="flex items-center space-x-1">
                             <button
                               onClick={() => handleStartEdit(hw)}
-                              className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded transition-all"
+                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-all"
                               title="Edit Assignment"
                             >
-                              <Pencil className="h-3 w-3" />
+                              <Pencil className="h-3.5 w-3.5" />
                             </button>
                             <button
                               onClick={() => setConfirmDeleteId(hw.id)}
-                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-55 rounded transition-all"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                               title="Delete Assignment"
                             >
-                              <Trash2 className="h-3 w-3" />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    <p className="text-xs text-slate-550 whitespace-pre-line border-t border-slate-100 pt-2.5 leading-relaxed">
+                    <p className="text-xs text-slate-600 border-t border-slate-100 pt-3 leading-relaxed">
                       {hw.target_task}
                     </p>
                   </div>
+
+                  {/* Card Action Footer: Dedicated Analytics Button */}
+                  <div className="pt-2 flex items-center justify-between border-t border-slate-100/80">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                      Analytics & Class Reports
+                    </span>
+                    <button
+                      onClick={() => setAnalyticsTarget({ id: hw.id, title: getKcDisplayName(hw.topic_kc_focus, kcList) || hw.topic_kc_focus, week: hw.week })}
+                      className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-all shadow-2xs"
+                      title="View Analytics & Heatmap"
+                    >
+                      <BarChart3 className="h-3.5 w-3.5 text-amber-600" />
+                      <span>View Analytics & Heatmap</span>
+                    </button>
+                  </div>
                 </div>
+
               ))}
             </div>
           )}
@@ -655,6 +700,16 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
           </div>
         </form>
       </div>
+
+      {/* XLSX Import Modal */}
+      <XlsxUploadModal
+        isOpen={isXlsxModalOpen}
+        onClose={() => setIsXlsxModalOpen(false)}
+        onSuccess={() => {
+          fetchData();
+        }}
+      />
     </div>
   );
 }
+
