@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { apiFetch } from '@/lib/api';
+import { decodeJwt } from '@/lib/auth';
 import StudentWorkspace from '../StudentWorkspace';
 
 async function getWeeklyTargets(token: string) {
@@ -22,10 +23,12 @@ export default async function StudentPracticumPage() {
   const cookieStore = await cookies();
   const token = cookieStore.get('token')?.value || '';
   const { data: targets } = await getWeeklyTargets(token);
+  // JWT `sub` is the user id (UUID) — namespaces the client-side progress cache (R2).
+  const userId = (token && decodeJwt(token)?.sub) || '';
 
   return (
     <div className="py-2">
-      <StudentWorkspace initialTargets={targets} mode="lab" />
+      <StudentWorkspace initialTargets={targets} mode="lab" userId={userId} />
     </div>
   );
 }

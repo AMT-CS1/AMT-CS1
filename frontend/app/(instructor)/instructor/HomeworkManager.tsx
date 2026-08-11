@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Calendar, AlertCircle, CheckCircle, RefreshCw, Pencil, Trash2, Shuffle, Plus, X, FlaskConical, KeyRound, Clock, FileSpreadsheet, BarChart3 } from 'lucide-react';
+import { Calendar, AlertCircle, CheckCircle, RefreshCw, Pencil, Trash2, Shuffle, Plus, X, FlaskConical, KeyRound, Clock, FileSpreadsheet, BarChart3, ListChecks, Eye, EyeOff, Sparkles } from 'lucide-react';
 import { KcInfo, getKcDisplayName } from '@/lib/kc-utils';
 import { SkeletonCardGrid } from '@/components/Skeleton';
 import XlsxUploadModal from '@/components/homework/XlsxUploadModal';
@@ -24,6 +24,8 @@ interface Problem {
   kc_tags: string;
 }
 
+type SelectionMode = 'kc' | 'manual' | 'random';
+
 interface Homework {
   id: string;
   course_ref: string;
@@ -36,6 +38,10 @@ interface Homework {
   kind?: 'homework' | 'lab';
   starts_at?: string | null;
   access_password?: string | null;
+  selection_mode?: SelectionMode;
+  problem_count?: number | null;
+  problem_keys?: string[];
+  is_published?: boolean;
 }
 
 const LAB_DURATION_MINUTES = 100;
@@ -68,6 +74,15 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
   const [randomizeProblems, setRandomizeProblems] = useState(false);
   const [startsAt, setStartsAt] = useState('');
   const [accessPassword, setAccessPassword] = useState('');
+
+  // Problem-set selection (R2) + checkpoint visibility (R5)
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>('kc');
+  const [problemCount, setProblemCount] = useState<number>(3);
+  const [selectedProblemKeys, setSelectedProblemKeys] = useState<string[]>([]);
+  const [randomPool, setRandomPool] = useState<'kc' | 'all'>('kc');
+  const [problemSearch, setProblemSearch] = useState('');
+  // Homework is visible by default; checkpoints start closed until the teacher opens them.
+  const [isPublished, setIsPublished] = useState<boolean>(kind !== 'lab');
   
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
@@ -134,6 +149,18 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
     );
   };
 
+  const toggleProblemKey = (key: string) => {
+    setSelectedProblemKeys(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
+
+  const filteredProblems = problems.filter(p => {
+    if (!problemSearch.trim()) return true;
+    const q = problemSearch.trim().toLowerCase();
+    return p.title.toLowerCase().includes(q) || p.key.toLowerCase().includes(q) || p.kc_tags.toLowerCase().includes(q);
+  });
+
   const handleStartEdit = (hw: Homework) => {
     setEditingHomework(hw);
     setWeek(hw.week);
@@ -142,6 +169,12 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
     setTargetTask(hw.target_task);
     setRandomizeProblems(hw.randomize_problems);
     setAccessPassword(hw.access_password || '');
+    setSelectionMode(hw.selection_mode || 'kc');
+    setProblemCount(hw.problem_count || 3);
+    setSelectedProblemKeys(hw.problem_keys || []);
+    setRandomPool('kc');
+    setProblemSearch('');
+    setIsPublished(hw.is_published !== false);
     try {
       setDeadline(hw.deadline ? toLocalInputValue(hw.deadline) : '');
     } catch (e) {
@@ -169,6 +202,12 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
     setRandomizeProblems(false);
     setStartsAt('');
     setAccessPassword('');
+    setSelectionMode('kc');
+    setProblemCount(3);
+    setSelectedProblemKeys([]);
+    setRandomPool('kc');
+    setProblemSearch('');
+    setIsPublished(kind !== 'lab');
     setError('');
     setSubmitSuccess(false);
     setSubmitting(false);
@@ -199,8 +238,23 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
     setSubmitSuccess(false);
     setError('');
 
-    if (!courseRef || !week || selectedKcs.length === 0 || !targetTask) {
-      setError('All fields are required. Please select at least one KC.');
+    if (!courseRef || !week || !targetTask) {
+      setError('Course reference, week, and instructions are required.');
+      setSubmitting(false);
+      return;
+    }
+    if (selectionMode === 'kc' && selectedKcs.length === 0) {
+      setError('Select at least one KC focus area for KC-based selection.');
+      setSubmitting(false);
+      return;
+    }
+    if (selectionMode === 'manual' && selectedProblemKeys.length === 0) {
+      setError('Pick at least one problem for manual selection.');
+      setSubmitting(false);
+      return;
+    }
+    if (selectionMode === 'random' && (!problemCount || problemCount < 1)) {
+      setError('Set how many problems to draw for random selection.');
       setSubmitting(false);
       return;
     }
@@ -242,10 +296,15 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
           target_task: targetTask,
           source: 'manual',
           deadline: effectiveDeadline,
-          randomize_problems: randomizeProblems,
+          randomize_problems: selectionMode === 'random',
           kind,
           starts_at: startsAt ? new Date(startsAt).toISOString() : null,
           access_password: kind === 'lab' && accessPassword.trim() ? accessPassword.trim() : null,
+          selection_mode: selectionMode,
+          problem_count: problemCount ? Number(problemCount) : null,
+          problem_keys: selectionMode === 'manual' ? selectedProblemKeys : [],
+          random_pool: randomPool,
+          is_published: isPublished,
         }),
       });
 
@@ -365,9 +424,14 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
                                 <KeyRound className="h-2.5 w-2.5" /> {hw.access_password}
                               </span>
                             )}
-                            {hw.randomize_problems && (
+                            {(hw.selection_mode === 'random' || hw.randomize_problems) && (
                               <span className="inline-flex items-center gap-1 text-[9px] bg-violet-50 text-violet-700 border border-violet-100 px-1.5 py-0.5 rounded-full font-bold">
                                 <Shuffle className="h-2.5 w-2.5" /> Random
+                              </span>
+                            )}
+                            {hw.selection_mode === 'manual' && (
+                              <span className="inline-flex items-center gap-1 text-[9px] bg-sky-50 text-sky-700 border border-sky-100 px-1.5 py-0.5 rounded-full font-bold">
+                                <ListChecks className="h-2.5 w-2.5" /> Manual
                               </span>
                             )}
                             {hw.topic_kc_focus.split(',').map(kc => (
@@ -380,9 +444,15 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
                       </div>
                       
                       <div className="flex items-center space-x-2 shrink-0">
-                        <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1 rounded-full font-bold">
-                          Published
-                        </span>
+                        {hw.is_published === false ? (
+                          <span className="text-[10px] bg-slate-100 text-slate-500 border border-slate-200 px-2.5 py-1 rounded-full font-bold inline-flex items-center gap-1">
+                            <EyeOff className="h-3 w-3" /> Hidden
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1 rounded-full font-bold inline-flex items-center gap-1">
+                            <Eye className="h-3 w-3" /> Visible
+                          </span>
+                        )}
                         
                         {confirmDeleteId === hw.id ? (
                           <div className="flex items-center space-x-1">
@@ -478,9 +548,9 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
                 {editingHomework ? `Edit ${kindLabel} Assignment` : `Publish New ${kindLabel}`}
               </h2>
               <p className="text-[10px] text-slate-450 mt-0.5 font-medium">
-                {editingHomework 
-                  ? `Modifying assignment for Week ${editingHomework.week} of ${editingHomework.course_ref}` 
-                  : 'Select KC focus areas. Students will be given 3 matching problems to solve.'}
+                {editingHomework
+                  ? `Modifying assignment for Week ${editingHomework.week} of ${editingHomework.course_ref}`
+                  : 'Choose how problems are assigned and set the weekly topic focus.'}
               </p>
             </div>
             <button
@@ -612,7 +682,7 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
           {/* KC Focus Selection */}
           <div>
             <label className="block text-xs font-bold text-slate-600 mb-2">
-              KC Focus Areas * 
+              KC Focus Areas {selectionMode === 'kc' ? '*' : <span className="font-medium text-slate-400">(weekly topic focus)</span>}
               {selectedKcs.length > 0 && (
                 <span className="ml-2 text-[10px] text-indigo-600 font-semibold">
                   ({matchingProblemCount} matching problem{matchingProblemCount !== 1 ? 's' : ''})
@@ -640,25 +710,163 @@ export default function HomeworkManager({ kind = 'homework' }: { kind?: 'homewor
             </div>
           </div>
 
-          {/* Randomize Checkbox */}
-          <div className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 bg-slate-50/50">
-            <input
-              type="checkbox"
-              id="randomize-problems"
-              checked={randomizeProblems}
-              onChange={(e) => setRandomizeProblems(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            <label htmlFor="randomize-problems" className="cursor-pointer">
-              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <Shuffle className="h-3.5 w-3.5 text-violet-500" />
-                Randomize Problems
-              </span>
-              <p className="text-[10px] text-slate-505 mt-0.5">
-                Each student receives a randomly-picked set of 3 problems from the matching KC pool.
+          {/* Problem Selection Mode (R2) */}
+          <div className="rounded-lg border border-slate-100 bg-slate-50/50 p-4 space-y-3">
+            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <ListChecks className="h-3.5 w-3.5 text-indigo-500" /> Problem Selection
+            </span>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { id: 'kc', label: 'By KC focus', icon: <Sparkles className="h-3.5 w-3.5" /> },
+                { id: 'manual', label: 'Pick problems', icon: <ListChecks className="h-3.5 w-3.5" /> },
+                { id: 'random', label: 'Random N', icon: <Shuffle className="h-3.5 w-3.5" /> },
+              ] as { id: SelectionMode; label: string; icon: React.ReactNode }[]).map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setSelectionMode(m.id)}
+                  className={`flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg border text-[11px] font-bold transition-all ${
+                    selectionMode === m.id
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                  }`}
+                >
+                  {m.icon}
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
+            {selectionMode === 'kc' && (
+              <p className="text-[10px] text-slate-500">
+                Students get up to <b>{problemCount || 3}</b> problems whose KC tags overlap the focus areas below
+                {selectedKcs.length > 0 && (
+                  <> — <b>{matchingProblemCount}</b> currently match</>
+                )}.
               </p>
-            </label>
+            )}
+
+            {selectionMode !== 'kc' && (
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 mb-1">Number of problems</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={problemCount}
+                  onChange={(e) => setProblemCount(Number(e.target.value))}
+                  className="w-24 rounded-lg border border-slate-200 px-3 py-1.5 text-xs focus:border-indigo-500 focus:outline-hidden"
+                />
+              </div>
+            )}
+
+            {selectionMode === 'random' && (
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 mb-1">Draw from</label>
+                <div className="flex gap-2">
+                  {(['kc', 'all'] as const).map((pool) => (
+                    <button
+                      key={pool}
+                      type="button"
+                      onClick={() => setRandomPool(pool)}
+                      className={`px-3 py-1.5 rounded-lg border text-[11px] font-bold transition-all ${
+                        randomPool === pool
+                          ? 'bg-violet-600 text-white border-violet-600'
+                          : 'bg-white text-slate-600 border-slate-200 hover:border-violet-300'
+                      }`}
+                    >
+                      {pool === 'kc' ? 'Matching KC pool' : 'All problems'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1.5">
+                  A random set is drawn and frozen when you save (the same set for every student).
+                </p>
+              </div>
+            )}
+
+            {selectionMode === 'manual' && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-slate-600">
+                    Pick problems ({selectedProblemKeys.length} selected)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Search…"
+                    value={problemSearch}
+                    onChange={(e) => setProblemSearch(e.target.value)}
+                    className="w-40 rounded-lg border border-slate-200 px-2 py-1 text-[11px] focus:border-indigo-500 focus:outline-hidden"
+                  />
+                </div>
+                <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white divide-y divide-slate-100">
+                  {filteredProblems.length === 0 ? (
+                    <p className="text-[11px] text-slate-400 p-3 text-center">No problems match.</p>
+                  ) : (
+                    filteredProblems.map((p) => {
+                      const checked = selectedProblemKeys.includes(p.key);
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => toggleProblemKey(p.key)}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
+                            checked ? 'bg-indigo-50/70' : 'hover:bg-slate-50'
+                          }`}
+                        >
+                          <span
+                            className={`h-4 w-4 rounded border flex items-center justify-center shrink-0 ${
+                              checked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'
+                            }`}
+                          >
+                            {checked && <CheckCircle className="h-3 w-3 text-white" />}
+                          </span>
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-[11px] font-bold text-slate-700 truncate">{p.title}</span>
+                            <span className="block text-[9px] text-slate-400 font-mono truncate">{p.key} · {p.kc_tags}</span>
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Visibility toggle (R5) */}
+          <button
+            type="button"
+            onClick={() => setIsPublished((v) => !v)}
+            className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${
+              isPublished ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 bg-slate-50/50'
+            }`}
+          >
+            <span
+              className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
+                isPublished ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'
+              }`}
+            >
+              {isPublished ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            </span>
+            <span className="flex-1">
+              <span className="text-xs font-bold text-slate-700 block">
+                {isPublished ? 'Visible to students' : 'Hidden from students'}
+              </span>
+              <span className="text-[10px] text-slate-500 block mt-0.5">
+                {isPracticum
+                  ? 'Checkpoints stay closed until you turn this on.'
+                  : 'Turn off to hide this from students.'}
+              </span>
+            </span>
+            <span
+              className={`text-[10px] font-bold px-2 py-1 rounded-full ${
+                isPublished ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+              }`}
+            >
+              {isPublished ? 'ON' : 'OFF'}
+            </span>
+          </button>
 
           <div>
             <label className="block text-xs font-bold text-slate-600 mb-1.5">{kindLabel} Instructions *</label>

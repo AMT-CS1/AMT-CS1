@@ -7,7 +7,7 @@ import {
   AlertCircle, RefreshCw, ChevronRight, ArrowLeft,
   Lock, Unlock, Calendar, Award, BookOpen, Clock,
   Shuffle, ThumbsUp, ThumbsDown, FlaskConical, KeyRound,
-  Mic, Square, Send, BrainCircuit
+  Mic, Square, Send, BrainCircuit, ShieldAlert
 } from 'lucide-react';
 import DapCodeEditor from '@/components/DapCodeEditor';
 import MisconceptionRemediation from '@/components/MisconceptionRemediation';
@@ -16,7 +16,21 @@ import { Skeleton } from '@/components/Skeleton';
 import { KcInfo, getKcDisplayName, DEFAULT_STARTER_CODE } from '@/lib/kc-utils';
 import MPQuizModal from '@/components/homework/MPQuizModal';
 import { HomeworkStatus } from '@/lib/homework-types';
-import { getHomeworkStatuses } from '@/lib/homework-api';
+import { getHomeworkStatuses, submitHomeworkSet } from '@/lib/homework-api';
+import { studentKey, readJson, writeJson, clearForeignStudentKeys } from '@/lib/student-storage';
+
+// Red / green / yellow module state styling for the MP + PS package boxes (R3-P1).
+const PHASE_STYLES: Record<string, { box: string; label: string }> = {
+  green: { box: 'bg-emerald-50 border-emerald-200 text-emerald-700', label: 'Open' },
+  completed: { box: 'bg-emerald-100 border-emerald-300 text-emerald-800', label: 'Done' },
+  in_progress: { box: 'bg-indigo-50 border-indigo-200 text-indigo-700', label: 'In progress' },
+  yellow: { box: 'bg-amber-50 border-amber-200 text-amber-700', label: 'Locked' },
+  red: { box: 'bg-rose-50 border-rose-200 text-rose-600', label: 'Not open' },
+  locked: { box: 'bg-slate-100 border-slate-200 text-slate-500', label: 'Locked' },
+  not_started: { box: 'bg-slate-100 border-slate-200 text-slate-500', label: 'Not started' },
+};
+const phaseStyle = (status?: string) =>
+  PHASE_STYLES[status || ''] || { box: 'bg-slate-100 border-slate-200 text-slate-500', label: status || '—' };
 
 
 interface WeeklyTarget {
@@ -33,6 +47,11 @@ interface WeeklyTarget {
   kind?: 'homework' | 'lab';
   starts_at?: string | null;
   requires_password?: boolean;
+  selection_mode?: 'kc' | 'manual' | 'random';
+  problem_count?: number | null;
+  is_published?: boolean;
+  // Server-resolved assigned problem keys (honors the selection mode).
+  problem_keys?: string[];
 }
 
 interface TargetGrade {
@@ -56,6 +75,8 @@ interface StudentWorkspaceProps {
   initialTargets: WeeklyTarget[];
   selectedTargetId?: string;
   mode?: 'homework' | 'lab';
+  /** Authenticated user id (JWT `sub`) — namespaces the client-side progress cache (R2). */
+  userId: string;
 }
 
 interface QuizQuestion {
@@ -115,7 +136,7 @@ const formatShortDate = (d: Date): string =>
 const formatTimeOnly = (d: Date): string =>
   d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 
-export default function StudentWorkspace({ initialTargets, selectedTargetId, mode = 'homework' }: StudentWorkspaceProps) {
+export default function StudentWorkspace({ initialTargets, selectedTargetId, mode = 'homework', userId }: StudentWorkspaceProps) {
   const router = useRouter();
   const basePath = mode === 'lab' ? '/student/practicum' : '/student';
   const [targets] = useState<WeeklyTarget[]>(() => {
@@ -150,10 +171,24 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
           const map: Record<string, HomeworkStatus> = {};
           statuses.forEach(s => { map[s.weekly_target_id] = s; });
           setHwStatuses(map);
+          // D6: the server is the source of truth. Drop any locally-mirrored
+          // "submitted" the server explicitly denies (targets the status
+          // endpoint doesn't cover — checkpoints — keep their mirror).
+          setLocallySubmitted(prev => {
+            const pruned = prev.filter(id => {
+              const st = map[id];
+              return !st || !!st.submitted_at;
+            });
+            if (pruned.length !== prev.length) {
+              writeJson(localStorage, studentKey(userId, 'submitted_targets'), pruned);
+            }
+            return pruned;
+          });
         })
         .catch(err => console.error('Failed to load homework statuses:', err));
     }
-  }, [mode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, userId]);
 
 
   // Resizable split between Problem Statement and Pseudocode Workspace (LeetCode-style)
@@ -175,6 +210,15 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
   const [submitting, setSubmitting] = useState(false);
   const [evalResult, setEvalResult] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Explicit set-submission (R1)
+  const [submittingSet, setSubmittingSet] = useState(false);
+  const [locallySubmitted, setLocallySubmitted] = useState<string[]>([]);
+  // PS "Jelasin Pseudocode" explanation (R3-P3)
+  const [pseudocodeExplanation, setPseudocodeExplanation] = useState('');
+  // Tab / app-switch integrity warning (R4)
+  const [showTabWarning, setShowTabWarning] = useState(false);
+  const [tabSwitchCount, setTabSwitchCount] = useState(0);
 
   // Hint / Concept Check Quiz States
   const [showHintPrompt, setShowHintPrompt] = useState(false);
@@ -217,38 +261,76 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
 
   const hasStarted = (t: WeeklyTarget) => !t.starts_at || nowTick >= new Date(t.starts_at).getTime();
   const isEnded = (t: WeeklyTarget) => !!t.deadline && nowTick >= new Date(t.deadline).getTime();
+  // A set is finalized once the student submits it (server status or local mirror);
+  // finalized sets open read-only so review can't move the completion timestamp.
+  const isSubmitted = (t: WeeklyTarget) => !!hwStatuses[t.id]?.submitted_at || locallySubmitted.includes(t.id);
 
   useEffect(() => {
     const interval = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch automated grades for targets whose deadline has passed
-  const endedTargetIds = targets.filter(isEnded).map(t => t.id).join(',');
+  // Fetch automated grades for targets in review (deadline passed OR explicitly submitted)
+  const reviewTargetIds = targets.filter(t => isEnded(t) || isSubmitted(t)).map(t => t.id).join(',');
   useEffect(() => {
-    targets.filter(isEnded).forEach(t => {
+    targets.filter(t => isEnded(t) || isSubmitted(t)).forEach(t => {
       setGrades(prev => {
         if (prev[t.id]) return prev;
         fetch(`/api/targets/grade?target_id=${t.id}`)
           .then(res => (res.ok ? res.json() : null))
           .then(data => {
-            if (data) setGrades(g => ({ ...g, [t.id]: data }));
+            if (data) {
+              setGrades(g => ({ ...g, [t.id]: data }));
+              // D6: reconcile the local solved mirror with the server's verdict —
+              // the cache may render ahead of a refresh, never instead of the server.
+              if (Array.isArray(data.solved_keys)) {
+                setSolvedProblemKeys(prevKeys => {
+                  const local = prevKeys[t.id] || [];
+                  const server: string[] = data.solved_keys;
+                  if (local.length === server.length && local.every(k => server.includes(k))) return prevKeys;
+                  const updated = { ...prevKeys, [t.id]: server };
+                  writeJson(localStorage, studentKey(userId, `solved_problems_${t.id}`), server);
+                  return updated;
+                });
+                const allSolved = data.total_problems > 0 && data.solved_problems >= data.total_problems;
+                setSolvedTargetIds(prevIds => {
+                  const has = prevIds.includes(t.id);
+                  if (allSolved === has) return prevIds;
+                  const next = allSolved ? [...prevIds, t.id] : prevIds.filter(id => id !== t.id);
+                  writeJson(localStorage, studentKey(userId, 'solved_homeworks'), next);
+                  return next;
+                });
+              }
+            }
           })
           .catch(err => console.error('Failed to fetch grade', err));
         return prev;
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endedTargetIds]);
+  }, [reviewTargetIds]);
 
-  // Restore lab unlock from this browser session
+  // R2: evict any cached progress belonging to a different student (cookie swap
+  // without sign-out) and the legacy un-namespaced keys, then restore the local
+  // submitted mirror (keeps read-only routing working for checkpoints too, where
+  // the homework status endpoint doesn't apply).
+  useEffect(() => {
+    if (typeof window !== 'undefined' && userId) {
+      clearForeignStudentKeys(userId);
+      const saved = readJson<string[]>(localStorage, studentKey(userId, 'submitted_targets'));
+      if (saved) setLocallySubmitted(saved);
+    }
+  }, [userId]);
+
+  // Restore lab unlock from this browser session (per-student — an unlock must
+  // not survive an account switch on a shared machine).
   useEffect(() => {
     if (mode === 'lab' && selectedTargetId && typeof window !== 'undefined') {
-      setLabUnlocked(!!sessionStorage.getItem(`amt_lab_pw_${selectedTargetId}`));
+      setLabUnlocked(!!sessionStorage.getItem(studentKey(userId, `lab_pw_${selectedTargetId}`)));
       setLabPasswordInput('');
       setUnlockError('');
     }
-  }, [mode, selectedTargetId]);
+  }, [mode, selectedTargetId, userId]);
 
   const handleUnlockLab = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -265,7 +347,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
       if (!res.ok) {
         throw new Error(data.error || 'Failed to unlock the practicum session.');
       }
-      sessionStorage.setItem(`amt_lab_pw_${selectedTarget.id}`, labPasswordInput.trim());
+      sessionStorage.setItem(studentKey(userId, `lab_pw_${selectedTarget.id}`), labPasswordInput.trim());
       setLabUnlocked(true);
     } catch (err: any) {
       setUnlockError(err.message || 'Invalid password.');
@@ -346,41 +428,21 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
   const getProblemsForTarget = (target: WeeklyTarget | null): Problem[] => {
     if (!target || problems.length === 0) return [];
 
-    // Parse target KCs
-    const targetKcs = target.topic_kc_focus.split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+    // The server resolves the assigned set (KC / manual / random) and returns the
+    // ordered keys — use them directly so every mode stays consistent.
+    if (target.problem_keys && target.problem_keys.length > 0) {
+      return target.problem_keys
+        .map(k => problems.find(p => p.key === k))
+        .filter(Boolean) as Problem[];
+    }
 
-    // Filter problems that have overlapping KCs
+    // Fallback (older payloads without resolved keys): legacy KC-overlap, capped.
+    const targetKcs = target.topic_kc_focus.split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
     const matching = problems.filter(p => {
       const pKcs = p.kc_tags.split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
       return targetKcs.some(tk => pKcs.includes(tk));
     });
-
-    if (matching.length === 0) return [];
-
-    if (target.randomize_problems && matching.length > 3) {
-      if (typeof window !== 'undefined') {
-        const cacheKey = `amt_assigned_problems_${target.id}`;
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-          try {
-            const cachedKeys = JSON.parse(cached);
-            const cachedProbs = cachedKeys.map((k: string) => problems.find(p => p.key === k)).filter(Boolean) as Problem[];
-            if (cachedProbs.length === 3) {
-              return cachedProbs;
-            }
-          } catch (e) {
-            console.error('Error parsing cached problems', e);
-          }
-        }
-
-        const shuffled = [...matching].sort(() => 0.5 - Math.random());
-        const selected = shuffled.slice(0, 3);
-        localStorage.setItem(cacheKey, JSON.stringify(selected.map(p => p.key)));
-        return selected;
-      }
-    }
-
-    return matching.slice(0, 3);
+    return matching.slice(0, target.problem_count || 3);
   };
 
   const assignedProblems = getProblemsForTarget(selectedTarget);
@@ -759,29 +821,19 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
   }, [selectedTargetId, activeProblemIndex, problems]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('amt_solved_homeworks');
-      if (saved) {
-        try {
-          setSolvedTargetIds(JSON.parse(saved));
-        } catch (e) {
-          console.error('Failed to parse solved homeworks', e);
-        }
-      }
+    if (typeof window !== 'undefined' && userId) {
+      const saved = readJson<string[]>(localStorage, studentKey(userId, 'solved_homeworks'));
+      if (saved) setSolvedTargetIds(saved);
 
       // Load solved problems per target
       const loaded: Record<string, string[]> = {};
       targets.forEach(t => {
-        const val = localStorage.getItem(`amt_solved_problems_${t.id}`);
-        if (val) {
-          try {
-            loaded[t.id] = JSON.parse(val);
-          } catch (e) { }
-        }
+        const val = readJson<string[]>(localStorage, studentKey(userId, `solved_problems_${t.id}`));
+        if (val) loaded[t.id] = val;
       });
       setSolvedProblemKeys(loaded);
     }
-  }, [targets]);
+  }, [targets, userId]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -895,8 +947,9 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
           confidence_level: 1.0,
           lang: descLang,
           target_id: selectedTarget.id,
+          pseudocode_explanation: pseudocodeExplanation.trim() || undefined,
           lab_password: mode === 'lab'
-            ? sessionStorage.getItem(`amt_lab_pw_${selectedTarget.id}`)
+            ? sessionStorage.getItem(studentKey(userId, `lab_pw_${selectedTarget.id}`))
             : undefined,
         }),
       });
@@ -938,7 +991,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
           const newSolved = [...currentSolved, taskRef];
           const updated = { ...solvedProblemKeys, [targetId]: newSolved };
           setSolvedProblemKeys(updated);
-          localStorage.setItem(`amt_solved_problems_${targetId}`, JSON.stringify(newSolved));
+          writeJson(localStorage, studentKey(userId, `solved_problems_${targetId}`), newSolved);
 
           // Check if all are completed
           const assigned = getProblemsForTarget(selectedTarget);
@@ -948,7 +1001,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
               const updatedTargets = [...prev];
               if (!updatedTargets.includes(targetId)) {
                 updatedTargets.push(targetId);
-                localStorage.setItem('amt_solved_homeworks', JSON.stringify(updatedTargets));
+                writeJson(localStorage, studentKey(userId, 'solved_homeworks'), updatedTargets);
               }
               return updatedTargets;
             });
@@ -965,6 +1018,92 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
     }
   };
 
+  // Explicit "Submit Homework/Checkpoint" — finalizes the set and flips it read-only.
+  const handleSubmitSet = async () => {
+    if (!selectedTarget) return;
+    setSubmittingSet(true);
+    setErrorMessage('');
+    try {
+      await submitHomeworkSet(selectedTarget.id);
+      // Mirror locally so review opens read-only immediately and after reloads.
+      setLocallySubmitted(prev => {
+        if (prev.includes(selectedTarget.id)) return prev;
+        const next = [...prev, selectedTarget.id];
+        writeJson(localStorage, studentKey(userId, 'submitted_targets'), next);
+        return next;
+      });
+      // Refresh homework statuses (homework mode) so submitted_at propagates.
+      if (mode === 'homework') {
+        try {
+          const statuses = await getHomeworkStatuses();
+          const map: Record<string, HomeworkStatus> = {};
+          statuses.forEach(s => { map[s.weekly_target_id] = s; });
+          setHwStatuses(map);
+        } catch (e) { /* ignore */ }
+      }
+      // Land on the dedicated self-review route so the student sees their
+      // answers/status/attempts immediately (R1) instead of the score-only screen.
+      router.push(`/student/review/${selectedTarget.id}`);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to submit this set.');
+    } finally {
+      setSubmittingSet(false);
+    }
+  };
+
+  // Tab / app-switch integrity detector (R4). Active only while actively solving
+  // (MP modal open, or the PS editor before the set is ended/submitted). Each
+  // switch pops a warning and is logged to the DB via the shared student-logs sink.
+  useEffect(() => {
+    const solvingMP = !!activeMpModalTarget;
+    const solvingPS = view === 'editor' && !!selectedTarget && isMounted
+      && !isEnded(selectedTarget) && !isSubmitted(selectedTarget);
+    if (!solvingMP && !solvingPS) return;
+
+    const phase = solvingMP ? 'mp' : 'ps';
+    const targetId = solvingMP ? activeMpModalTarget?.id : selectedTarget?.id;
+
+    // A single tab/app switch fires `blur` (while the doc is still visible) and
+    // then `visibilitychange` — a ~1s cooldown collapses that pair so one switch
+    // logs once and warns once (R3).
+    let lastLoggedAt = 0;
+    const logSwitch = (kind: string) => {
+      const now = Date.now();
+      if (now - lastLoggedAt < 1000) return;
+      lastLoggedAt = now;
+      setTabSwitchCount(c => c + 1);
+      setShowTabWarning(true);
+      fetch('/api/student-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event_type: 'tab_switch',
+          payload: {
+            target_id: targetId,
+            phase,
+            kind,
+            context: mode === 'lab' ? 'practicum' : 'practice',
+            occurred_at: new Date().toISOString(),
+          },
+        }),
+      }).catch(() => { /* best-effort */ });
+    };
+
+    // Keep both listeners: visibility catches tab switches, blur catches
+    // same-desktop app switches that never hide the tab. The cooldown dedupes
+    // the overlap, so the old `!document.hidden` guard is no longer needed.
+    const onVisibility = () => { if (document.hidden) logSwitch('visibility_hidden'); };
+    const onBlur = () => { logSwitch('window_blur'); };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('blur', onBlur);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, selectedTargetId, activeMpModalTarget, isMounted, mode]);
+
   const isTargetUnlocked = (index: number): boolean => {
     if (index === 0) return true;
     const prevTarget = targets[index - 1];
@@ -977,6 +1116,57 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
 
   const completionCount = targets.filter(isTargetCompleted).length;
   const isAllCompleted = targets.length > 0 && completionCount === targets.length;
+
+  // Rendered in BOTH the list and editor views so the MP quiz can open from the
+  // homework list (where clicking a not-yet-started homework sets this target
+  // instead of navigating). Without it in the list view, the click looks dead.
+  const mpQuizModal = activeMpModalTarget && (
+    <MPQuizModal
+      isOpen={!!activeMpModalTarget}
+      weeklyTargetId={activeMpModalTarget.id}
+      targetTitle={activeMpModalTarget.title || `Homework Week ${activeMpModalTarget.week}`}
+      weekNumber={activeMpModalTarget.week}
+      onClose={() => setActiveMpModalTarget(null)}
+      onComplete={async () => {
+        const completedTarget = activeMpModalTarget;
+        setActiveMpModalTarget(null);
+        // Refresh homework statuses
+        try {
+          const statuses = await getHomeworkStatuses();
+          const map: Record<string, HomeworkStatus> = {};
+          statuses.forEach(s => { map[s.weekly_target_id] = s; });
+          setHwStatuses(map);
+        } catch (e) { }
+        // Navigate to solve workspace
+        router.push(`${basePath}/solve/${completedTarget.id}`);
+      }}
+    />
+  );
+
+  // Integrity warning shown when the student switches tab/app while solving (R4).
+  const tabWarningModal = showTabWarning && (
+    <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md rounded-2xl border border-rose-200 bg-white p-6 shadow-2xl space-y-4 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 text-rose-600">
+          <ShieldAlert className="h-6 w-6" />
+        </div>
+        <div>
+          <h3 className="text-sm font-extrabold text-slate-900">Jangan pindah tab atau aplikasi lain</h3>
+          <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+            Berpindah tab atau aplikasi lain selama mengerjakan tidak diperbolehkan dan sudah dicatat.
+            {tabSwitchCount > 1 && <> Terdeteksi <b>{tabSwitchCount}×</b>.</>}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowTabWarning(false)}
+          className="w-full rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2.5 text-xs font-bold text-white transition-all"
+        >
+          Saya mengerti, lanjut mengerjakan
+        </button>
+      </div>
+    </div>
+  );
 
   if (view === 'list') {
     return (
@@ -1053,6 +1243,12 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
                 const completed = isTargetCompleted(target);
                 const assigned = getProblemsForTarget(target);
                 const solvedCount = (solvedProblemKeys[target.id] || []).length;
+                // Overdue = deadline passed AND the student neither finished nor
+                // submitted (R2). A package closed on time stays neutral (Q5).
+                const overdue = ended && !completed && !isSubmitted(target);
+                // A solved or submitted package offers Review directly (goes to
+                // the dedicated review route), not "Solve Homework".
+                const reviewable = completed || isSubmitted(target);
 
                 const title = target.title || (assigned.length === 1 ? assigned[0].title : '') || getKcDisplayName(target.topic_kc_focus, kcList);
                 const description = target.description || target.target_task;
@@ -1085,7 +1281,11 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
                           )}
                         </div>
 
-                        {ended ? (
+                        {overdue ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 border border-rose-200 px-2.5 py-0.5 text-[10px] font-bold text-rose-700">
+                            <Clock className="h-3 w-3" /> Overdue{gradeInfo ? ` — Grade: ${gradeInfo.grade}` : ''}
+                          </span>
+                        ) : ended ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[10px] font-bold text-amber-700">
                             <Clock className="h-3 w-3" /> Ended{gradeInfo ? ` — Grade: ${gradeInfo.grade}` : ''}
                           </span>
@@ -1115,6 +1315,25 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
                           {description}
                         </p>
                       </div>
+
+                      {/* Weekly package: MP (green→open) then PS (yellow until MP done) — R3-P1 */}
+                      {mode === 'homework' && hwStatuses[target.id] && (() => {
+                        const st = hwStatuses[target.id];
+                        const mp = phaseStyle(st.mp_status);
+                        const ps = phaseStyle(st.ps_status);
+                        return (
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className={`rounded-lg border px-2.5 py-1.5 flex items-center gap-1.5 ${mp.box}`}>
+                              <BrainCircuit className="h-3 w-3 shrink-0" />
+                              <span className="text-[10px] font-bold truncate">MP · {mp.label}</span>
+                            </div>
+                            <div className={`rounded-lg border px-2.5 py-1.5 flex items-center gap-1.5 ${ps.box}`}>
+                              <Code2 className="h-3 w-3 shrink-0" />
+                              <span className="text-[10px] font-bold truncate">PS · {ps.label}</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Lab session schedule: start, end, and duration at a glance */}
                       {mode === 'lab' && target.starts_at && isMounted && (() => {
@@ -1172,11 +1391,13 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
                                 <span className="block text-[12px] font-extrabold text-slate-800">{start ? formatTimeOnly(start) : 'Immediately'}</span>
                                 <span className="block text-[9px] font-semibold text-slate-500">{start ? formatShortDate(start) : 'Open'}</span>
                               </div>
-                              <div className="rounded-lg bg-white/70 border border-indigo-100 px-2.5 py-1.5">
-                                <span className="block text-[8px] font-bold uppercase tracking-wider text-slate-400">Due Date</span>
-                                <span className="block text-[12px] font-extrabold text-slate-800">{end ? formatTimeOnly(end) : '—'}</span>
-                                <span className="block text-[9px] font-semibold text-slate-500">
-                                  {end ? (sameDay ? 'Same day' : formatShortDate(end)) : 'No deadline set'}
+                              <div className={`rounded-lg px-2.5 py-1.5 ${overdue ? 'bg-rose-50 border border-rose-200' : 'bg-white/70 border border-indigo-100'}`}>
+                                <span className={`block text-[8px] font-bold uppercase tracking-wider ${overdue ? 'text-rose-500' : 'text-slate-400'}`}>
+                                  {overdue ? 'Overdue' : 'Due Date'}
+                                </span>
+                                <span className={`block text-[12px] font-extrabold ${overdue ? 'text-rose-700' : 'text-slate-800'}`}>{end ? formatTimeOnly(end) : '—'}</span>
+                                <span className={`block text-[9px] font-semibold ${overdue ? 'text-rose-500' : 'text-slate-500'}`}>
+                                  {end ? (overdue ? 'Past due' : (sameDay ? 'Same day' : formatShortDate(end))) : 'No deadline set'}
                                 </span>
                               </div>
                             </div>
@@ -1218,18 +1439,25 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
                           <Award className="h-3.5 w-3.5" />
                           <span>View Grade</span>
                         </button>
+                      ) : unlocked && reviewable ? (
+                        <button
+                          onClick={() => router.push(`/student/review/${target.id}`)}
+                          className="flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-all"
+                        >
+                          <BookOpen className="h-3.5 w-3.5" />
+                          <span>Review</span>
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
                       ) : unlocked ? (
                         <button
                           onClick={() => handleStartHomework(target)}
-                          className={`flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-bold transition-all ${completed
-                            ? 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
-                            : mode === 'lab'
-                              ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-105 text-white hover:shadow-md'
-                              : 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:brightness-105 text-white hover:shadow-md'
+                          className={`flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-bold transition-all ${mode === 'lab'
+                            ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-105 text-white hover:shadow-md'
+                            : 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:brightness-105 text-white hover:shadow-md'
                             }`}
                         >
-                          {mode === 'lab' && !completed && <KeyRound className="h-3.5 w-3.5" />}
-                          <span>{completed ? 'Review Code' : mode === 'lab' ? 'Enter Checkpoint' : 'Solve Homework'}</span>
+                          {mode === 'lab' && <KeyRound className="h-3.5 w-3.5" />}
+                          <span>{mode === 'lab' ? 'Enter Checkpoint' : 'Solve Homework'}</span>
                           <ChevronRight className="h-3.5 w-3.5" />
                         </button>
                       ) : (
@@ -1248,6 +1476,9 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
             </div>
           )}
         </div>
+
+        {mpQuizModal}
+        {tabWarningModal}
       </div>
     );
   }
@@ -1647,10 +1878,11 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
     );
   }
 
-  // Deadline passed: submissions are closed — show the automated grade instead of the editor.
-  // isEnded re-evaluates every second, so a student inside the page is switched
-  // to the grade view automatically the moment the deadline is reached.
-  if (selectedTarget && isMounted && isEnded(selectedTarget)) {
+  // Deadline passed OR the student explicitly submitted: submissions are closed —
+  // show the read-only automated grade instead of the editor. isEnded re-evaluates
+  // every second; isSubmitted flips right after a Submit, so reviewing never creates
+  // new attempts and never moves the completion timestamp.
+  if (selectedTarget && isMounted && (isEnded(selectedTarget) || isSubmitted(selectedTarget))) {
     const gradeInfo = grades[selectedTarget.id];
     const isLab = selectedTarget.kind === 'lab';
 
@@ -1682,14 +1914,24 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
                 <Skeleton className="h-2.5 w-36" />
               </div>
             )}
-            <button
-              type="button"
-              onClick={() => router.push(basePath)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 px-4 py-2 text-[11px] font-bold text-slate-600 transition-all cursor-pointer"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              <span>Back to Checkpoints</span>
-            </button>
+            <div className="flex items-center justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => selectedTarget && router.push(`/student/review/${selectedTarget.id}`)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 px-4 py-2 text-[11px] font-bold text-white transition-all cursor-pointer"
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                <span>Review Your Answers</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push(basePath)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 px-4 py-2 text-[11px] font-bold text-slate-600 transition-all cursor-pointer"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                <span>Back to Checkpoints</span>
+              </button>
+            </div>
           </div>
         </div>
       );
@@ -1720,14 +1962,24 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
                 </p>
               </div>
               <div className="h-8 w-px bg-slate-200" />
-              <button
-                type="button"
-                onClick={() => router.push(basePath)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 px-4 py-2.5 text-[11px] font-bold text-slate-600 transition-all cursor-pointer"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                <span>Back to Homework List</span>
-              </button>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => selectedTarget && router.push(`/student/review/${selectedTarget.id}`)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 px-4 py-2.5 text-[11px] font-bold text-white transition-all cursor-pointer"
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  <span>Review Your Answers</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push(basePath)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 px-4 py-2.5 text-[11px] font-bold text-slate-600 transition-all cursor-pointer"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  <span>Back to Homework List</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></div>
@@ -2042,8 +2294,27 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
           })}
         </div>
 
-        <div className="text-[11px] font-bold text-slate-500 ml-auto shrink-0">
-          {(solvedProblemKeys[selectedTarget?.id ?? ''] || []).length} / {assignedProblems.length} Solved
+        <div className="flex items-center gap-2.5 ml-auto shrink-0">
+          <span className="text-[11px] font-bold text-slate-500">
+            {(solvedProblemKeys[selectedTarget?.id ?? ''] || []).length} / {assignedProblems.length} Solved
+          </span>
+          {assignedProblems.length > 0 &&
+            assignedProblems.every(p => (solvedProblemKeys[selectedTarget?.id ?? ''] || []).includes(p.key)) && (
+              <button
+                type="button"
+                onClick={handleSubmitSet}
+                disabled={submittingSet}
+                className="flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] px-3 py-1.5 text-[11px] font-bold text-white transition-all disabled:opacity-50"
+                title="Finalize and submit this set — it becomes read-only"
+              >
+                {submittingSet ? (
+                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" />
+                )}
+                <span>Submit {mode === 'lab' ? 'Checkpoint' : 'Homework'}</span>
+              </button>
+            )}
         </div>
       </div>
 
@@ -2172,6 +2443,23 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
                   onChange={setCode}
                   rows={16}
                   fillHeight
+                />
+              </div>
+
+              {/* Jelasin Pseudocode — PS reasoning captured with the submission (R3-P3) */}
+              <div className="border-t border-slate-200 bg-white px-3 sm:px-4 py-2 shrink-0">
+                <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  <BrainCircuit className="h-3 w-3 text-violet-500" />
+                  {descLang === 'id' ? 'Jelasin Pseudocode' : 'Explain your pseudocode'}
+                </label>
+                <textarea
+                  value={pseudocodeExplanation}
+                  onChange={(e) => setPseudocodeExplanation(e.target.value)}
+                  rows={2}
+                  placeholder={descLang === 'id'
+                    ? 'Tuliskan penjelasan logika pseudocode kamu…'
+                    : 'Explain the logic of your pseudocode…'}
+                  className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] focus:border-indigo-500 focus:outline-hidden resize-none"
                 />
               </div>
             </form>
@@ -2380,28 +2668,8 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
       </div>
 
       {/* MP Quiz Modal */}
-      {activeMpModalTarget && (
-        <MPQuizModal
-          isOpen={!!activeMpModalTarget}
-          weeklyTargetId={activeMpModalTarget.id}
-          targetTitle={activeMpModalTarget.title || `Homework Week ${activeMpModalTarget.week}`}
-          weekNumber={activeMpModalTarget.week}
-          onClose={() => setActiveMpModalTarget(null)}
-          onComplete={async () => {
-            const completedTarget = activeMpModalTarget;
-            setActiveMpModalTarget(null);
-            // Refresh homework statuses
-            try {
-              const statuses = await getHomeworkStatuses();
-              const map: Record<string, HomeworkStatus> = {};
-              statuses.forEach(s => { map[s.weekly_target_id] = s; });
-              setHwStatuses(map);
-            } catch (e) { }
-            // Navigate to solve workspace
-            router.push(`${basePath}/solve/${completedTarget.id}`);
-          }}
-        />
-      )}
+      {mpQuizModal}
+      {tabWarningModal}
     </div>
   );
 }

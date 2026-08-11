@@ -14,6 +14,8 @@ export interface HomeworkStatus {
   ps_status: HomeworkPhaseStatus;
   attempts_on_current?: number;
   max_attempts?: number;
+  // Set once the student explicitly submits the whole set (then it's read-only).
+  submitted_at?: string | null;
 }
 
 export interface MPQuestion {
@@ -121,5 +123,7 @@ export interface XlsxUploadResponse {
     misconception_questions: number;
     problem_misconceptions: number;
   };
+  /** Non-fatal authoring problems (e.g. unknown misconception tags skipped) — P5/R1a. */
+  warnings?: string[];
   error_message?: string;
 }

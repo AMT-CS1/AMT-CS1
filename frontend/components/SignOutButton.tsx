@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogOut } from 'lucide-react';
+import { clearAllStudentKeys } from '@/lib/student-storage';
 
 export default function SignOutButton() {
   const router = useRouter();
@@ -11,13 +12,18 @@ export default function SignOutButton() {
   const handleSignOut = async () => {
     if (loading) return;
     setLoading(true);
+    // R2: wipe the per-student progress cache BEFORE the network call — storage
+    // removal is synchronous and can't fail; the POST can. On a shared machine
+    // nothing of this account may survive for the next login.
+    clearAllStudentKeys();
     try {
       const res = await fetch('/api/auth/logout', {
         method: 'POST',
       });
       if (res.ok) {
         router.refresh(); // Triggers middleware re-evaluation
-        router.push('/login');
+        // replace (not push): Back must not land on the authenticated page.
+        router.replace('/login');
       } else {
         console.error('Logout request failed');
       }

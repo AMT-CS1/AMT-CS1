@@ -22,6 +22,18 @@ export async function getHomeworkStatuses(): Promise<HomeworkStatus[]> {
 }
 
 /**
+ * Explicitly submit (finalize) a homework/checkpoint set. Idempotent server-side.
+ */
+export async function submitHomeworkSet(weeklyTargetId: string): Promise<{ status: string; already_submitted: boolean; ps_status: string }> {
+  const res = await fetch(`/api/homework/${weeklyTargetId}/submit`, { method: 'POST' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to submit this set');
+  }
+  return res.json();
+}
+
+/**
  * Get or create an active MP session for a weekly target.
  */
 export async function getMPSession(weeklyTargetId: string): Promise<MPSessionStatus> {
