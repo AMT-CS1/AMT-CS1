@@ -1,14 +1,34 @@
 from fastapi import APIRouter, Depends, HTTPException
 import uuid
+from typing import List
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.security import RoleChecker
 from app.core.database import get_db
 from app.models.state import StudentModelState
+from app.models.user import User
 from app.schemas.progress import StudentProgressResponse
 
 router = APIRouter(prefix="/students", tags=["students"])
+
+
+class StudentListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    username: str
+    role: str
+
+
+@router.get("", response_model=List[StudentListItem])
+async def list_users(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["instructor", "researcher"])),
+):
+    """id → username lookup for teacher-facing views (e.g. the submissions page)."""
+    res = await db.execute(select(User).order_by(User.username))
+    return res.scalars().all()
 
 @router.get("/{id}/progress", response_model=StudentProgressResponse)
 async def get_student_progress(

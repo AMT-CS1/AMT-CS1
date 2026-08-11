@@ -47,8 +47,12 @@ export default function SubmissionsPage() {
   const [problems, setProblems] = useState<Problem[]>([]);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [kcList, setKcList] = useState<KcInfo[]>([]);
+  const [usersById, setUsersById] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Show a username when we can resolve it, else fall back to the raw id.
+  const displayName = (studentId: string) => usersById[studentId] || studentId;
 
   // View state machine: 'homeworks' | 'students' | 'student-detail'
   const [view, setView] = useState<'homeworks' | 'students' | 'student-detail'>('homeworks');
@@ -66,11 +70,12 @@ export default function SubmissionsPage() {
     setLoading(true);
     setError('');
     try {
-      const [hwRes, problemsRes, attemptsRes, kcsRes] = await Promise.all([
+      const [hwRes, problemsRes, attemptsRes, kcsRes, usersRes] = await Promise.all([
         fetch('/api/targets'),
         fetch('/api/problems'),
         fetch('/api/attempts'),
-        fetch('/api/kcs')
+        fetch('/api/kcs'),
+        fetch('/api/students')
       ]);
 
       if (!hwRes.ok || !problemsRes.ok || !attemptsRes.ok) {
@@ -81,11 +86,15 @@ export default function SubmissionsPage() {
       const problemsData = await problemsRes.json();
       const attemptsData = await attemptsRes.json();
       const kcsData = kcsRes.ok ? await kcsRes.json() : [];
+      const usersData = usersRes.ok ? await usersRes.json() : [];
 
       setHomeworks(hwData.sort((a: Homework, b: Homework) => a.week - b.week));
       setProblems(problemsData);
       setAttempts(attemptsData);
       setKcList(kcsData);
+      setUsersById(
+        Object.fromEntries((usersData as { id: string; username: string }[]).map(u => [u.id, u.username]))
+      );
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'An error occurred while loading submissions.');
@@ -303,7 +312,7 @@ export default function SubmissionsPage() {
                         <User className="h-4 w-4" />
                       </div>
                       <div>
-                        <span className="text-xs font-bold text-slate-800 font-mono">{studentId}</span>
+                        <span className="text-xs font-bold text-slate-800">{displayName(studentId)}</span>
                         <span className="block text-[10px] text-slate-450 mt-0.5">
                           {studentHwAttempts.length} total attempt{studentHwAttempts.length !== 1 ? 's' : ''} submitted
                         </span>
@@ -353,7 +362,7 @@ export default function SubmissionsPage() {
               Student Work Details
             </h1>
             <p className="text-xs text-slate-500 mt-1">
-              Viewing submissions for student <span className="font-mono text-indigo-700 font-bold">{selectedStudentId.substring(0, 8)}...</span> on Week {selectedHomework.week} Homework.
+              Viewing submissions for student <span className="text-indigo-700 font-bold">{displayName(selectedStudentId)}</span> on Week {selectedHomework.week} Homework.
             </p>
           </div>
         </div>
