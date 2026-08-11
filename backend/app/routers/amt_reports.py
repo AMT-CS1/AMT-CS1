@@ -14,6 +14,7 @@ from app.core.amt_reports import (
     teacher_summary,
     student_report,
     student_detail,
+    student_homework_history,
 )
 from app.schemas.amt_reports import (
     AmtTeacherSummary,
@@ -92,3 +93,18 @@ async def get_amt_student_self(
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found in token")
     return await student_report(db, uuid.UUID(str(user_id)))
+
+
+@router.get("/summary/student/homework")
+async def get_amt_student_homework_history(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["student", "instructor", "researcher"])),
+):
+    """The caller's own activity grouped per homework/checkpoint, MP and PS split.
+
+    BOLA: always force-resolved to the caller (students only ever see themselves).
+    """
+    user_id = current_user.get("id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
+    return await student_homework_history(db, uuid.UUID(str(user_id)))

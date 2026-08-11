@@ -47,14 +47,49 @@ K_COMPONENTS = [
 # with dummy remedial problems and can be injected for testing (see
 # REMEDIATION_DUMMY_SQ in core/config.py).
 MISCONCEPTION_TAGS = [
-    {"id": "CO", "name": "Constants", "description": "Confusing constants and literal values."},
-    {"id": "VA", "name": "Variables", "description": "Misusing variables, assignment, or naming."},
-    {"id": "OP", "name": "Operators", "description": "Confusing operators (e.g. assignment vs comparison)."},
-    {"id": "EX", "name": "Expressions", "description": "Building or evaluating expressions incorrectly."},
-    {"id": "IO", "name": "Input/Output", "description": "Misusing input/output statements."},
-    {"id": "CD", "name": "Conditionals", "description": "Misusing conditionals (if/elseif/else)."},
-    {"id": "LO", "name": "Loops", "description": "Misusing loops (while/for)."},
-    {"id": "SQ", "name": "Sequence", "description": "Misreading program order / top-to-bottom structure."},
+    # study_focus: one actionable sentence per tag — what to review and how to
+    # check yourself. Deterministic study guidance for the P5 recommendation
+    # panel (plan D7); reviewable by teaching staff, never generated.
+    {
+        "id": "CO", "name": "Constants",
+        "description": "Confusing constants and literal values.",
+        "study_focus": "Review the difference between a constant and a variable: a constant is named once and never reassigned — check yourself by finding every place a value could change.",
+    },
+    {
+        "id": "VA", "name": "Variables",
+        "description": "Misusing variables, assignment, or naming.",
+        "study_focus": "Practice tracing assignments line by line (e.g. x <- x + 3): write down each variable's value after every statement and confirm assignment replaces the old value using the current one.",
+    },
+    {
+        "id": "OP", "name": "Operators",
+        "description": "Confusing operators (e.g. assignment vs comparison).",
+        "study_focus": "Revisit operator precedence and the difference between assignment (<-) and comparison (==): evaluate small expressions like 5 + 3 * 2 by hand before checking them in code.",
+    },
+    {
+        "id": "EX", "name": "Expressions",
+        "description": "Building or evaluating expressions incorrectly.",
+        "study_focus": "Break compound expressions into single steps with intermediate variables, then compare your step-by-step result with the one-line version to confirm they match.",
+    },
+    {
+        "id": "IO", "name": "Input/Output",
+        "description": "Misusing input/output statements.",
+        "study_focus": "Review what read and write actually do: read stores input into a variable, write shows a value — trace a short program and predict its exact output before running it.",
+    },
+    {
+        "id": "CD", "name": "Conditionals",
+        "description": "Misusing conditionals (if/elseif/else).",
+        "study_focus": "For each if/else you write, list which inputs take which branch, and test one input per branch — including the boundary value where the condition flips.",
+    },
+    {
+        "id": "LO", "name": "Loops",
+        "description": "Misusing loops (while/for).",
+        "study_focus": "Trace loops with a table (iteration number, counter value, condition result): verify where the counter changes, when the condition turns false, and how many times the body really runs.",
+    },
+    {
+        "id": "SQ", "name": "Sequence",
+        "description": "Misreading program order / top-to-bottom structure.",
+        "study_focus": "Number each statement and execute them strictly top to bottom on paper: a statement only sees the values that exist at the moment it runs, not values set later.",
+    },
 ]
 
 # Ordered set of valid tag ids, for quick membership checks.
@@ -81,3 +116,20 @@ def misconception_tag_name(tag: str) -> str:
         if t["id"] == tag:
             return t["name"]
     return tag
+
+
+def misconception_tag_guidance(tag: str) -> dict:
+    """Full guidance record for a tag id: name, description, study_focus, topic_area.
+
+    topic_area comes from K_COMPONENTS; SQ is a misconception-only tag with no KC
+    entry, so it (and any unknown tag) falls back rather than breaking the payload.
+    """
+    entry = next((t for t in MISCONCEPTION_TAGS if t["id"] == tag), None)
+    kc = next((k for k in K_COMPONENTS if k["id"] == tag), None)
+    return {
+        "tag": tag,
+        "name": entry["name"] if entry else tag,
+        "description": entry.get("description", "") if entry else "",
+        "study_focus": entry.get("study_focus", "") if entry else "",
+        "topic_area": kc["topic_area"] if kc else "Program Structure",
+    }

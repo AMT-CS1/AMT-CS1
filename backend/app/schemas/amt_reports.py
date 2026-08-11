@@ -36,6 +36,30 @@ class AmtMisconceptionStat(BaseModel):
     count: int
 
 
+# ---- P5/R3: misconception profile + study recommendations ----
+
+class AmtMisconceptionProfileItem(BaseModel):
+    """One concept's fused MP + PS evidence. Shape is a superset of
+    AmtMisconceptionStat so MisconceptionPanel renders it unchanged."""
+    tag: str
+    name: str
+    count: int
+    mp_count: int
+    ps_count: int
+    codes: List[str] = []
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+
+
+class AmtRecommendationItem(BaseModel):
+    tag: str
+    name: str
+    topic_area: str
+    count: int
+    study_focus: str
+    evidence: str  # "quiz" | "code" | "both"
+
+
 class AmtBlockKpis(BaseModel):
     problems_attempted: int
     problems_solved: int
@@ -72,6 +96,9 @@ class AmtStudentDetail(BaseModel):
     practice: AmtBlock
     practicum: AmtBlock
     remediation: List[AmtRemediationStatus] = []
+    # P5/R3: the same overall homework profile the student sees in My History.
+    misconception_profile: List[AmtMisconceptionProfileItem] = []
+    recommendations: List[AmtRecommendationItem] = []
 
 
 # ---- Teacher cohort summary ----

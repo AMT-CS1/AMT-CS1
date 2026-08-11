@@ -5,7 +5,7 @@
 // one visual language instead of re-deriving it.
 
 import React from 'react';
-import { Brain } from 'lucide-react';
+import { Brain, Compass } from 'lucide-react';
 import { pct } from './formatters';
 
 // ---------- KPI card ----------
@@ -116,6 +116,68 @@ export function MisconceptionPanel({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ---------- study recommendations (P5/R3) ----------
+
+export interface RecommendationItem {
+  tag: string;
+  name: string;
+  topic_area: string;
+  count: number;
+  study_focus: string;
+  evidence: 'quiz' | 'code' | 'both';
+}
+
+const EVIDENCE_STYLES: Record<RecommendationItem['evidence'], { label: string; cls: string }> = {
+  quiz: { label: 'Quiz', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  code: { label: 'Code', cls: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  both: { label: 'Quiz + Code', cls: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200' },
+};
+
+export function RecommendationCard({
+  items,
+  title = 'What to study next',
+  subtitle,
+}: {
+  items: RecommendationItem[];
+  title?: string;
+  subtitle?: string;
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+      <div className="flex items-center gap-2 mb-2.5">
+        <Compass className="h-4.5 w-4.5 text-teal-600" />
+        <h3 className="text-sm font-extrabold text-slate-800">{title}</h3>
+      </div>
+      {subtitle && <p className="text-[11px] text-slate-500 mb-3">{subtitle}</p>}
+      {items.length === 0 ? (
+        <p className="text-[11px] text-slate-400">
+          Nothing flagged yet — keep working and this panel will point you at the concepts to revisit.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {items.map((r) => {
+            const ev = EVIDENCE_STYLES[r.evidence] ?? EVIDENCE_STYLES.both;
+            return (
+              <div key={r.tag} className="rounded-lg border border-slate-150 bg-slate-50/50 p-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 border border-teal-200">{r.tag}</span>
+                  <span className="text-xs font-bold text-slate-800">{r.name}</span>
+                  <span className="text-[10px] text-slate-400">· {r.topic_area}</span>
+                  <span className={`ml-auto inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-bold ${ev.cls}`}>
+                    {ev.label}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-500">×{r.count}</span>
+                </div>
+                <p className="mt-1.5 text-[11px] text-slate-600 leading-relaxed">{r.study_focus}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -50,6 +50,10 @@ QUESTIONS = [
         "answer_index": 0,
         "explanation_en": "The loop adds 1 + 2 + 3 = 6 across its three iterations.",
         "explanation_id": "Loop menambahkan 1 + 2 + 3 = 6 selama tiga iterasi.",
+        # P5: what each distractor reveals (parallel to options_en; correct = []).
+        # "3" -> thinks the body ran once; "0" -> thinks the loop never entered;
+        # "9" -> off-by-one, ran an extra iteration.
+        "option_misconceptions": [[], ["LO", "SQ"], ["LO"], ["LO"]],
     },
     {
         "misconception_tag": "LO",
@@ -94,6 +98,9 @@ QUESTIONS = [
         "answer_index": 0,
         "explanation_en": "7 % 2 is 1 (not 0), so the else branch runs and prints \"Odd\".",
         "explanation_id": "7 % 2 adalah 1 (bukan 0), jadi cabang else berjalan dan menampilkan \"Odd\".",
+        # P5: "Even" -> condition/operator misread; "7" -> confuses write with the
+        # variable's value; "Nothing" -> thinks a false if skips the else too.
+        "option_misconceptions": [[], ["CD", "OP"], ["IO"], ["CD"]],
     },
     {
         "misconception_tag": "CD",
@@ -252,6 +259,11 @@ async def main():
             row.answer_index = q["answer_index"]
             row.explanation_en = q["explanation_en"]
             row.explanation_id = q["explanation_id"]
+            # P5: per-option trigger lists where authored. Unauthored questions
+            # are left untouched (assigning None would write JSON null over SQL
+            # NULL); the engine falls back to the question-level tag for them.
+            if q.get("option_misconceptions") is not None:
+                row.option_misconceptions = q["option_misconceptions"]
             print(f"  {action} [{q['misconception_tag']}] {q['text_en'][:50]}...")
 
         await session.commit()

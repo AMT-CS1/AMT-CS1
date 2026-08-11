@@ -13,6 +13,8 @@ from app.core.security import RoleChecker
 from app.core.database import get_db
 from app.core.storage import get_s3_client
 from app.core.config import settings
+from app.core.kcs import misconception_code_to_tag, MISCONCEPTION_TAG_IDS
+from app.core.problem_selection import resolve_assigned_problems_async
 
 from app.models import (
     User,
@@ -64,15 +66,45 @@ def is_target_active(target: WeeklyTarget) -> bool:
         return False
     return True
 
-# Helper to match problems with a target's topic focus
-def matched_problems_for_target(target: WeeklyTarget, problems: List[Problem]) -> List[Problem]:
-    target_kcs = {k.strip().upper() for k in target.topic_kc_focus.split(",") if k.strip()}
-    matched = []
-    for p in problems:
-        problem_kcs = {k.strip().upper() for k in p.kc_tags.split(",") if k.strip()}
-        if problem_kcs & target_kcs:
-            matched.append(p)
-    return matched
+# Problem membership now lives in app.core.problem_selection
+# (resolve_assigned_problems_async) so KC / manual / random modes stay consistent.
+
+async def _questions_for_queue_tag(db: AsyncSession, tag: str) -> list[MisconceptionQuestion]:
+    """Bank questions for a queue tag: exact match first, KC-family fallback second.
+
+    The tag vocabulary is split (P5/D3): `problem_misconceptions` may carry specific
+    codes ("VA-01") while the bank may be seeded with family tags ("VA") — strict
+    equality used to silently return nothing and auto-advance the session. Mirrors
+    the tolerant prefix match the PS side already does (attempts.py).
+    """
+    res = await db.execute(select(MisconceptionQuestion).where(MisconceptionQuestion.misconception_tag == tag))
+    questions = list(res.scalars().all())
+    if questions:
+        return questions
+    family = misconception_code_to_tag(tag)
+    if family and family != tag:
+        res = await db.execute(select(MisconceptionQuestion).where(MisconceptionQuestion.misconception_tag == family))
+        questions = list(res.scalars().all())
+    return questions
+
+
+def _triggered_tags_for_answer(question: MisconceptionQuestion, selected_option: str, is_correct: bool) -> list:
+    """Tags credited to one MP answer (P5/D2) — diagnostic metadata, never scoring.
+
+    Option-level triggers when authored; else the question-level tag on a wrong
+    answer. "Tidak Tahu" (D) is absence of evidence, not a misconception (§7-Q2):
+    it scores incorrect but credits no tags — the text_input carries the signal.
+    """
+    if selected_option == "D":
+        return []
+    if is_correct:
+        return []
+    opt_map = question.option_misconceptions
+    idx = ord(selected_option) - ord("A")
+    if isinstance(opt_map, list) and 0 <= idx < len(opt_map):
+        entry = opt_map[idx]
+        return [str(t) for t in entry] if isinstance(entry, list) else []
+    return [question.misconception_tag]
 
 # Helper to pre-aggregate reporting statistics
 async def upsert_class_summary(db: AsyncSession, user_id: uuid.UUID, weekly_target_id: uuid.UUID):
@@ -112,7 +144,7 @@ async def upsert_class_summary(db: AsyncSession, user_id: uuid.UUID, weekly_targ
     # 2. PS Score
     problems_res = await db.execute(select(Problem))
     all_problems = problems_res.scalars().all()
-    matched = matched_problems_for_target(target, all_problems)
+    matched = await resolve_assigned_problems_async(db, target, all_problems)
     matched_keys = [p.key for p in matched]
     
     ps_score = None
@@ -223,9 +255,11 @@ async def list_homework_status(
     for t in targets:
         prog = progress_records.get(t.id)
         
+        submitted_at = None
         if prog:
             mp_status = prog.mp_status
             ps_status = prog.ps_status
+            submitted_at = as_utc(prog.submitted_at)
         else:
             # Determine active status dynamically
             active = is_target_active(t)
@@ -244,7 +278,8 @@ async def list_homework_status(
                 title=t.title,
                 deadline=as_utc(t.deadline),
                 mp_status=mp_status,
-                ps_status=ps_status
+                ps_status=ps_status,
+                submitted_at=submitted_at,
             )
         )
     return response
@@ -308,7 +343,7 @@ async def get_or_create_mp_session(
         # Find matching problems
         problems_res = await db.execute(select(Problem))
         all_problems = problems_res.scalars().all()
-        matched = matched_problems_for_target(target, all_problems)
+        matched = await resolve_assigned_problems_async(db, target, all_problems)
         matched_ids = [p.id for p in matched]
 
         tag_queue = []
@@ -361,10 +396,9 @@ async def get_or_create_mp_session(
                 weekly_target_id=weekly_target_id
             )
 
-        # Get first question
+        # Get first question (exact tag, else KC-family fallback — P5/D3)
         first_tag = filtered_queue[0]
-        q_res = await db.execute(select(MisconceptionQuestion).where(MisconceptionQuestion.misconception_tag == first_tag))
-        questions = q_res.scalars().all()
+        questions = await _questions_for_queue_tag(db, first_tag)
         selected_q = random.choice(questions) if questions else None
 
         session = StudentMPSession(
@@ -386,8 +420,7 @@ async def get_or_create_mp_session(
         # Load question if missing but session active
         if session.current_question_id is None and session.current_index < len(session.tag_queue):
             tag = session.tag_queue[session.current_index]
-            q_res = await db.execute(select(MisconceptionQuestion).where(MisconceptionQuestion.misconception_tag == tag))
-            questions = q_res.scalars().all()
+            questions = await _questions_for_queue_tag(db, tag)
             selected_q = random.choice(questions) if questions else None
             if selected_q:
                 session.current_question_id = selected_q.id
@@ -469,7 +502,8 @@ async def submit_mp_answer(
     elif selected_option == "D":
         is_correct = False  # Option D (Tidak Tahu) is always treated as incorrect
 
-    # 4. Log attempt
+    # 4. Log attempt — including which misconceptions the chosen option reveals
+    # (P5/D2; diagnostic metadata only, never a scoring input).
     status_str = "correct" if is_correct else "incorrect"
     attempt_log = StudentMPAttempt(
         id=uuid.uuid4(),
@@ -479,7 +513,8 @@ async def submit_mp_answer(
         misconception_tag=question.misconception_tag,
         selected_option=selected_option,
         text_input=payload.text_input,
-        status=status_str
+        status=status_str,
+        triggered_tags=_triggered_tags_for_answer(question, selected_option, is_correct)
     )
     db.add(attempt_log)
     
@@ -539,10 +574,9 @@ async def submit_mp_answer(
     # Load next question if session is still active
     next_q_resp = None
     if not session.completed_at and advance:
-        # Load next question
+        # Load next question (exact tag, else KC-family fallback — P5/D3)
         tag = session.tag_queue[session.current_index]
-        q_list_res = await db.execute(select(MisconceptionQuestion).where(MisconceptionQuestion.misconception_tag == tag))
-        questions = q_list_res.scalars().all()
+        questions = await _questions_for_queue_tag(db, tag)
         selected_q = random.choice(questions) if questions else None
         if selected_q:
             session.current_question_id = selected_q.id
@@ -586,6 +620,76 @@ async def submit_mp_answer(
         explanation_id=question.explanation_id,
         session_status=sess_status
     )
+
+
+@router.post("/{weekly_target_id}/submit")
+async def submit_homework_set(
+    weekly_target_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["student"]))
+):
+    """Explicitly finalize a homework/checkpoint set.
+
+    Idempotent: stamps submitted_at / ps_completed_at only on the first submit and
+    never moves them afterwards. Once submitted the set is read-only (enforced in
+    the attempts POST), so reviewing can no longer shift the completion timestamp.
+    """
+    user_id = uuid.UUID(current_user["id"])
+
+    target_res = await db.execute(select(WeeklyTarget).where(WeeklyTarget.id == weekly_target_id))
+    target = target_res.scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=404, detail="Target not found")
+
+    # Every assigned problem must be solved before the set can be submitted.
+    problems = (await db.execute(select(Problem))).scalars().all()
+    assigned = await resolve_assigned_problems_async(db, target, problems)
+    assigned_keys = [p.key for p in assigned]
+    solved_keys: set[str] = set()
+    if assigned_keys:
+        solved_res = await db.execute(
+            select(Attempt.task_ref).where(
+                and_(
+                    Attempt.user_id == user_id,
+                    Attempt.passed == True,  # noqa: E712
+                    Attempt.task_ref.in_(assigned_keys),
+                )
+            ).distinct()
+        )
+        solved_keys = {row[0] for row in solved_res.all()}
+    if not assigned_keys or len(solved_keys) < len(assigned_keys):
+        raise HTTPException(status_code=400, detail="Finish every problem in this set before submitting.")
+
+    prog_res = await db.execute(
+        select(StudentHomeworkProgress).where(
+            and_(
+                StudentHomeworkProgress.user_id == user_id,
+                StudentHomeworkProgress.weekly_target_id == weekly_target_id,
+            )
+        )
+    )
+    progress = prog_res.scalar_one_or_none()
+    if progress is None:
+        progress = StudentHomeworkProgress(
+            id=uuid.uuid4(),
+            user_id=user_id,
+            weekly_target_id=weekly_target_id,
+            mp_status="completed",
+            ps_status="completed",
+        )
+        db.add(progress)
+
+    already_submitted = progress.submitted_at is not None
+    if progress.ps_completed_at is None:
+        progress.ps_completed_at = func.now()
+    if progress.submitted_at is None:
+        progress.submitted_at = func.now()
+    progress.ps_status = "completed"
+
+    await db.commit()
+    await upsert_class_summary(db, user_id, weekly_target_id)
+
+    return {"status": "ok", "already_submitted": already_submitted, "ps_status": "completed"}
 
 
 # Analytics / Reporting Endpoints
@@ -669,7 +773,7 @@ async def get_heatmap_report(
     # Get problems for this target
     problems_res = await db.execute(select(Problem))
     all_problems = problems_res.scalars().all()
-    matched = matched_problems_for_target(target, all_problems)
+    matched = await resolve_assigned_problems_async(db, target, all_problems)
     matched_ids = [p.id for p in matched]
 
     misconceptions_list = []
@@ -764,7 +868,7 @@ async def get_student_drilldown(
     # 2. Fetch PS Attempts
     problems_res = await db.execute(select(Problem))
     all_problems = problems_res.scalars().all()
-    matched = matched_problems_for_target(target, all_problems)
+    matched = await resolve_assigned_problems_async(db, target, all_problems)
     matched_keys = [p.key for p in matched]
 
     ps_details = []
@@ -878,6 +982,9 @@ async def upload_and_process_xlsx(
         "misconception_questions": 0,
         "problem_misconceptions": 0
     }
+    # Non-fatal authoring problems (e.g. unknown misconception tags) — reported
+    # back to the uploader instead of failing the whole file (P5/R1a).
+    warnings: list[str] = []
 
     try:
         # A. Process Participants / Users
@@ -981,6 +1088,34 @@ async def upload_and_process_xlsx(
                 exp_en = str(row[7]).strip() if len(row) > 7 and row[7] else None
                 exp_id = str(row[8]).strip() if len(row) > 8 and row[8] else exp_en
 
+                # P5/R1a: optional per-option trigger columns (option_a/b/c_misconceptions,
+                # cols 10-12) — comma-separated or JSON-array tag lists. Assembled into a
+                # list parallel to opts_en; unknown tags are skipped and reported, a
+                # length mismatch is padded with []. Left as None when no cell is filled
+                # so re-uploading an old-format file never wipes authored triggers.
+                option_misc = None
+                trigger_cols = [row[i] if len(row) > i else None for i in (9, 10, 11)]
+                if any(c is not None and str(c).strip() for c in trigger_cols):
+                    option_misc = []
+                    for opt_i in range(len(opts_en)):
+                        raw_cell = trigger_cols[opt_i] if opt_i < len(trigger_cols) else None
+                        if opt_i == answer_idx:
+                            # The correct option carries no triggers by definition.
+                            option_misc.append([])
+                            continue
+                        valid_tags = []
+                        for tg in parse_options(raw_cell):
+                            tg_norm = str(tg).strip().upper()
+                            if not tg_norm:
+                                continue
+                            if tg_norm in MISCONCEPTION_TAG_IDS or misconception_code_to_tag(tg_norm):
+                                valid_tags.append(tg_norm)
+                            else:
+                                warnings.append(
+                                    f"question bank '{text_en[:40]}': unknown tag '{tg_norm}' (option {chr(65 + opt_i)}) skipped"
+                                )
+                        option_misc.append(valid_tags)
+
                 # Reconcile questions based on tag and text match
                 exist_q_res = await db.execute(
                     select(MisconceptionQuestion).where(
@@ -999,7 +1134,8 @@ async def upload_and_process_xlsx(
                         options_id=opts_id,
                         answer_index=answer_idx,
                         explanation_en=exp_en,
-                        explanation_id=exp_id
+                        explanation_id=exp_id,
+                        option_misconceptions=option_misc
                     )
                     db.add(new_q)
                 else:
@@ -1010,6 +1146,8 @@ async def upload_and_process_xlsx(
                     existing_q.answer_index = answer_idx
                     existing_q.explanation_en = exp_en
                     existing_q.explanation_id = exp_id
+                    if option_misc is not None:
+                        existing_q.option_misconceptions = option_misc
                 reconciled["misconception_questions"] += 1
 
         # D. Process Problem-Misconception mappings
@@ -1053,5 +1191,6 @@ async def upload_and_process_xlsx(
 
     return {
         "status": "success",
-        "details": reconciled
+        "details": reconciled,
+        "warnings": warnings
     }

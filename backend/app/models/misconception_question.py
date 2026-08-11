@@ -16,7 +16,9 @@ class MisconceptionQuestion(Base):
     __tablename__ = "misconception_questions"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    misconception_tag: Mapped[str] = mapped_column(String(8), nullable=False, index=True)  # e.g. "LO", "CD", "SQ"
+    # KC-family tag ("LO", "SQ") or specific code ("VA-01") — same width as
+    # problem_misconceptions.misconception_tag so the two vocabularies line up (P5/D3).
+    misconception_tag: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
 
     # Question body (bilingual). `code` is an optional pseudocode snippet to reason about.
     text_en: Mapped[str] = mapped_column(Text, nullable=False)
@@ -27,6 +29,13 @@ class MisconceptionQuestion(Base):
     options_en: Mapped[list] = mapped_column(JSONB, nullable=False)
     options_id: Mapped[list] = mapped_column(JSONB, nullable=False)
     answer_index: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Option-level triggers (P5/D1): list parallel to options_en — entry i is the
+    # list of misconception tags that picking option i reveals (correct option: []).
+    # NULL = not authored; the engine then falls back to the question-level tag.
+    # Diagnostic metadata only — NEVER a scoring input, and never sent to students
+    # (it would label the distractors).
+    option_misconceptions: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     # Shown after answering (safe to reveal — it's pedagogical, not a homework solution).
     explanation_en: Mapped[str] = mapped_column(Text, nullable=True)

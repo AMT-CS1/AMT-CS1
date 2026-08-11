@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     # tag list whenever any misconception is detected. SQ has no automatic detector
     # yet — this flag lets testers reach the SQ remediation round. Test-only.
     REMEDIATION_DUMMY_SQ: bool = False
+
+    # P5/D7: LLM rephrasing of study recommendations. OFF everywhere — the seam
+    # (_phrase_recommendations in core/amt_reports.py) is merged dormant; the
+    # deterministic study_focus text in core/kcs.py is what ships. When enabled
+    # later, the LLM may only reword study_focus — never change which tags are
+    # recommended, their order, or their counts — and must fall back to the
+    # deterministic text on any failure.
+    RECOMMENDATIONS_LLM_ENABLED: bool = False
     
     # MinIO / S3 Settings
     MINIO_ENDPOINT: str = "localhost:9000"

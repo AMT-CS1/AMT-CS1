@@ -17,12 +17,20 @@ import uuid
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.kcs import misconception_code_to_tag, misconception_tag_name
+from app.core.config import settings
+from app.core.kcs import (
+    misconception_code_to_tag,
+    misconception_tag_name,
+    misconception_tag_guidance,
+)
 from app.models.attempt import Attempt
 from app.models.user import User
 from app.models.problem import Problem
 from app.models.remediation import RemediationSession
 from app.models.lms import LmsParticipant
+from app.models.target import WeeklyTarget
+from app.models.homework_workflow import StudentMPAttempt, StudentHomeworkProgress
+from app.models.misconception_question import MisconceptionQuestion
 
 
 def _round(v, digits: int = 2):
@@ -54,6 +62,133 @@ async def _problem_titles(db: AsyncSession, task_refs: set[str]) -> dict[str, st
         return {}
     rows = await db.execute(select(Problem.key, Problem.title).where(Problem.key.in_(task_refs)))
     return {k: t for k, t in rows}
+
+
+# ---------------------------------------------------------------------------
+# P5/R3 — misconception profile + study recommendations
+# ---------------------------------------------------------------------------
+
+# How many study recommendations to surface (§7-Q4): enough to act on, few
+# enough to not read as a verdict.
+TOP_RECOMMENDATIONS = 3
+
+
+def _misconception_profile(mp_rows, ps_rows) -> list[dict]:
+    """Fuse MP and PS misconception evidence into one per-tag view (plan D8).
+
+    MP evidence: each wrong `StudentMPAttempt` credits its `triggered_tags`
+    (option-level, P5/D2) when recorded; pre-P5 rows fall back to the question's
+    tag — except "Tidak Tahu" (D), which is absence of evidence (§7-Q2).
+    PS evidence: the AST-detected codes on each attempt, family-deduped per
+    attempt (same rule as `_attempt_tags`) so one attempt counts a concept once.
+
+    Specific codes ("VA-01") normalize to their KC family for grouping but are
+    kept in `codes` for display. MP/PS counts stay separate so the UI can show
+    whether a concept fails in the quiz, in code, or both.
+    """
+    per_tag: dict[str, dict] = {}
+
+    def _bucket(tag: str) -> dict:
+        return per_tag.setdefault(tag, {
+            "tag": tag,
+            "name": misconception_tag_name(tag),
+            "count": 0,
+            "mp_count": 0,
+            "ps_count": 0,
+            "codes": set(),
+            "first_seen": None,
+            "last_seen": None,
+        })
+
+    def _credit(bucket: dict, source: str, code: str | None, ts) -> None:
+        bucket["count"] += 1
+        bucket[f"{source}_count"] += 1
+        if code and code != bucket["tag"]:
+            bucket["codes"].add(code)
+        if ts is not None:
+            if bucket["first_seen"] is None or ts < bucket["first_seen"]:
+                bucket["first_seen"] = ts
+            if bucket["last_seen"] is None or ts > bucket["last_seen"]:
+                bucket["last_seen"] = ts
+
+    # --- MP evidence ---
+    for m in mp_rows:
+        if m.status == "correct":
+            continue
+        if m.triggered_tags is not None:
+            credited = m.triggered_tags
+        elif m.selected_option == "D":
+            credited = []  # pre-P5 "Tidak Tahu": same absence-of-evidence rule
+        else:
+            credited = [m.misconception_tag]
+        for code in credited:
+            fam = misconception_code_to_tag(str(code))
+            if fam:
+                _credit(_bucket(fam), "mp", str(code), m.timestamp)
+
+    # --- PS evidence ---
+    for a in ps_rows:
+        fams_seen: set[str] = set()
+        codes_by_fam: dict[str, list[str]] = defaultdict(list)
+        for entry in (a.misconceptions or []):
+            code = entry.get("code") if isinstance(entry, dict) else None
+            fam = misconception_code_to_tag(code) if code else None
+            if fam:
+                fams_seen.add(fam)
+                codes_by_fam[fam].append(code)
+        for fam in fams_seen:
+            b = _bucket(fam)
+            _credit(b, "ps", None, a.timestamp)
+            b["codes"].update(codes_by_fam[fam])
+
+    out = []
+    for b in per_tag.values():
+        b["codes"] = sorted(b["codes"])
+        out.append(b)
+    out.sort(key=lambda b: (-b["count"], b["tag"]))
+    return out
+
+
+async def _phrase_recommendations(items: list[dict]) -> list[dict]:
+    """LLM rephrasing seam (plan D7) — merged DISABLED; pass-through today.
+
+    Contract for the future implementation: the LLM may only rewrite the
+    *wording* of `study_focus`. It must never change which tags are
+    recommended, their order, their counts, or any other field — ranking stays
+    deterministic and auditable. Any exception, timeout, or malformed response
+    falls back to the deterministic text (same never-break-the-main-path rule
+    as misconception detection).
+    """
+    if not settings.RECOMMENDATIONS_LLM_ENABLED:
+        return items
+    # Future phase: hand `items` to get_llm_provider() to reword study_focus
+    # only, under the contract above. Until then the flag stays off and the
+    # deterministic text ships.
+    return items
+
+
+async def _recommendations(profile: list[dict]) -> list[dict]:
+    """Top study recommendations from a misconception profile (plan D7).
+
+    Deterministic: top tags by evidence count mapped to the static guidance in
+    core/kcs.py. `evidence` says where the concept fails: quiz (MP), code (PS),
+    or both. Empty when there is no evidence — the UI shows a clean empty state.
+    """
+    items = []
+    for p in profile[:TOP_RECOMMENDATIONS]:
+        if p["count"] < 1:
+            continue
+        g = misconception_tag_guidance(p["tag"])
+        evidence = "both" if (p["mp_count"] and p["ps_count"]) else ("quiz" if p["mp_count"] else "code")
+        items.append({
+            "tag": p["tag"],
+            "name": g["name"],
+            "topic_area": g["topic_area"],
+            "count": p["count"],
+            "study_focus": g["study_focus"],
+            "evidence": evidence,
+        })
+    return await _phrase_recommendations(items)
 
 
 def _build_block(rows: list[Attempt], titles: dict[str, str]) -> dict:
@@ -158,7 +293,161 @@ async def student_detail(db: AsyncSession, user_id: uuid.UUID) -> dict:
         }
         for r in rem
     ]
+    # P5/R3: the same overall homework misconception profile the student sees in
+    # My History, so teacher and student look at identical numbers. Same filters
+    # as student_homework_history: MP attempts on non-lab targets, PS practice
+    # attempts carrying a target_id.
+    mp_rows = (await db.execute(
+        select(StudentMPAttempt).where(StudentMPAttempt.user_id == user_id)
+    )).scalars().all()
+    lab_tids = set()
+    mp_tids = {m.weekly_target_id for m in mp_rows}
+    if mp_tids:
+        lab_tids = {
+            t.id for t in (await db.execute(
+                select(WeeklyTarget).where(WeeklyTarget.id.in_(mp_tids), WeeklyTarget.kind == "lab")
+            )).scalars().all()
+        }
+    ps_rows = (await db.execute(
+        select(Attempt).where(
+            Attempt.user_id == user_id,
+            Attempt.target_id.isnot(None),
+            Attempt.context == "practice",
+        )
+    )).scalars().all()
+    profile = _misconception_profile(
+        [m for m in mp_rows if m.weekly_target_id not in lab_tids], ps_rows
+    )
+    base["misconception_profile"] = profile
+    base["recommendations"] = await _recommendations(profile)
     return base
+
+
+async def student_homework_history(db: AsyncSession, user_id: uuid.UUID) -> dict:
+    """A student's own activity grouped per homework/checkpoint (Week-n), each split
+    into a MP section (from student_mp_attempts) and a PS section (from attempts).
+
+    Powers the refined My History tabs. Only attempts carrying a target_id are
+    grouped; legacy NULL-target rows are omitted (consistent with the no-backfill rule).
+    """
+    ps_rows = (await db.execute(
+        select(Attempt).where(
+            Attempt.user_id == user_id,
+            Attempt.target_id.isnot(None),
+            Attempt.context.in_(["practice", "practicum"]),
+        ).order_by(Attempt.timestamp)
+    )).scalars().all()
+    titles = await _problem_titles(db, {a.task_ref for a in ps_rows})
+
+    mp_rows = (await db.execute(
+        select(StudentMPAttempt).where(StudentMPAttempt.user_id == user_id).order_by(StudentMPAttempt.timestamp)
+    )).scalars().all()
+    q_map: dict = {}
+    q_ids = {m.misconception_question_id for m in mp_rows}
+    if q_ids:
+        qrows = (await db.execute(
+            select(MisconceptionQuestion).where(MisconceptionQuestion.id.in_(q_ids))
+        )).scalars().all()
+        q_map = {q.id: q for q in qrows}
+
+    prog_rows = (await db.execute(
+        select(StudentHomeworkProgress).where(StudentHomeworkProgress.user_id == user_id)
+    )).scalars().all()
+    prog_by_target = {p.weekly_target_id: p for p in prog_rows}
+
+    target_ids = {a.target_id for a in ps_rows} | {m.weekly_target_id for m in mp_rows}
+    targets: dict = {}
+    if target_ids:
+        trows = (await db.execute(
+            select(WeeklyTarget).where(WeeklyTarget.id.in_(target_ids))
+        )).scalars().all()
+        targets = {t.id: t for t in trows}
+
+    ps_by_target: dict = defaultdict(list)
+    for a in ps_rows:
+        ps_by_target[a.target_id].append(a)
+    mp_by_target: dict = defaultdict(list)
+    for m in mp_rows:
+        mp_by_target[m.weekly_target_id].append(m)
+
+    entries = []
+    for tid, t in targets.items():
+        by_problem: dict = defaultdict(list)
+        for a in ps_by_target.get(tid, []):
+            by_problem[a.task_ref].append(a)
+        ps_problems = []
+        for task_ref, prows in by_problem.items():
+            prows.sort(key=lambda a: a.timestamp)
+            solved = any(a.passed for a in prows)
+            ps_problems.append({
+                "task_ref": task_ref,
+                "title": titles.get(task_ref),
+                "solved": solved,
+                "first_solved_at": next((a.timestamp for a in prows if a.passed), None),
+                "attempts": [
+                    {
+                        "id": a.id,
+                        "timestamp": a.timestamp,
+                        "passed": a.passed,
+                        "misconception_tags": _attempt_tags(a.misconceptions),
+                        "pseudocode_explanation": a.pseudocode_explanation,
+                    }
+                    for a in prows
+                ],
+            })
+        ps_problems.sort(key=lambda p: (p["solved"], p["task_ref"]))
+
+        mp_out = []
+        for m in mp_by_target.get(tid, []):
+            q = q_map.get(m.misconception_question_id)
+            mp_out.append({
+                "misconception_tag": m.misconception_tag,
+                "question_text_en": q.text_en if q else None,
+                "question_text_id": q.text_id if q else None,
+                "selected_option": m.selected_option,
+                "text_input": m.text_input,
+                "status": m.status,
+                "timestamp": m.timestamp,
+            })
+        mp_correct = sum(1 for m in mp_by_target.get(tid, []) if m.status == "correct")
+
+        prog = prog_by_target.get(tid)
+        # P5/R3: this week's misconception profile + study recommendations,
+        # scoped to the same MP and PS rows listed below it.
+        week_profile = _misconception_profile(mp_by_target.get(tid, []), ps_by_target.get(tid, []))
+        entries.append({
+            "weekly_target_id": str(tid),
+            "week": t.week,
+            "title": t.title,
+            "kind": t.kind,
+            "context": "practicum" if t.kind == "lab" else "practice",
+            "submitted_at": prog.submitted_at if prog else None,
+            "mp": {"attempts": mp_out, "total": len(mp_out), "correct": mp_correct},
+            "ps": {
+                "problems": ps_problems,
+                "attempted": len(by_problem),
+                "solved": sum(1 for p in ps_problems if p["solved"]),
+            },
+            "misconception_profile": week_profile,
+            "recommendations": await _recommendations(week_profile),
+        })
+
+    entries.sort(key=lambda e: e["week"])
+
+    # P5/R3: overall profile across all homework (practice) entries — the input
+    # for the top-of-tab panel and the "what to study next" card.
+    practice_tids = [tid for tid, t in targets.items() if t.kind != "lab"]
+    overall_profile = _misconception_profile(
+        [m for tid in practice_tids for m in mp_by_target.get(tid, [])],
+        [a for tid in practice_tids for a in ps_by_target.get(tid, [])],
+    )
+    return {
+        "student": await _student_identity(db, user_id),
+        "homeworks": [e for e in entries if e["context"] == "practice"],
+        "checkpoints": [e for e in entries if e["context"] == "practicum"],
+        "misconception_profile": overall_profile,
+        "recommendations": await _recommendations(overall_profile),
+    }
 
 
 async def _roster_names(db: AsyncSession, user_ids: list[uuid.UUID]) -> tuple[dict, dict, set]:
