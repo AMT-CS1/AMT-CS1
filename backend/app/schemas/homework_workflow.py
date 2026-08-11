@@ -13,6 +13,7 @@ class HomeworkStatusResponse(BaseModel):
     deadline: Optional[datetime] = None
     mp_status: str  # "red" (locked), "green" (available), "yellow" (accessible only after something else - N/A for MP), "completed"
     ps_status: str  # "red" (locked), "green" (available), "yellow" (locked; accessible only after MP completion), "completed"
+    submitted_at: Optional[datetime] = None  # set once the student explicitly submits the set
 
 
 class MPQuestionResponse(BaseModel):

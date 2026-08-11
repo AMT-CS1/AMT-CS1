@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, DateTime, Float, func, Boolean, Index
+from sqlalchemy import String, ForeignKey, DateTime, Float, func, Boolean, Index, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
@@ -27,6 +27,9 @@ class Attempt(Base):
     target_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("weekly_targets.id", ondelete="SET NULL"), nullable=True
     )
+    # PS "Jelasin Pseudocode" — the student's typed explanation of their pseudocode
+    # for this submission. Null on legacy rows and on attempts made without one.
+    pseudocode_explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index("ix_attempts_user_context", "user_id", "context"),

@@ -13,6 +13,8 @@ class AttemptCreate(BaseModel):
     # start-time, and lab-password enforcement.
     target_id: uuid.UUID | None = None
     lab_password: str | None = None
+    # PS "Jelasin Pseudocode" — the student's explanation of their pseudocode.
+    pseudocode_explanation: str | None = Field(default=None, max_length=10000)
 
 class AttemptResponse(BaseModel):
     id: uuid.UUID

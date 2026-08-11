@@ -40,6 +40,9 @@ class StudentHomeworkProgress(Base):
     mp_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ps_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ps_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set when the student explicitly submits the whole set. Once set, the workspace
+    # is read-only (review mode) and completion timestamps are never re-stamped.
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
@@ -97,6 +100,10 @@ class StudentMPAttempt(Base):
 
     # status: "correct", "incorrect"
     status: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Tags credited to this attempt from the chosen option's trigger list (P5/D2).
+    # Written at submit time so later edits to the question never rewrite history.
+    # Correct answer / "Tidak Tahu": []. NULL = pre-P5 row.
+    triggered_tags: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=func.now())
 
     # relationships

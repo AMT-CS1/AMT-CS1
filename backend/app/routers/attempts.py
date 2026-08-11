@@ -24,7 +24,8 @@ from app.models.remediation import RemediationSession
 from app.models.homework_workflow import ProblemMisconception, StudentHomeworkProgress, StudentMisconceptionRecord
 from app.core import remediation as rem
 from app.routers.targets import as_utc, now_utc
-from app.routers.homework_workflow import matched_problems_for_target, upsert_class_summary
+from app.routers.homework_workflow import upsert_class_summary
+from app.core.problem_selection import resolve_assigned_problems_async
 from app.schemas.attempt import AttemptCreate, AttemptEvaluationResponse, AttemptResponse, RemediationSummary
 
 
@@ -150,6 +151,27 @@ async def create_attempt(
         if db_target.kind == "lab":
             if db_target.access_password and attempt.lab_password != db_target.access_password:
                 raise HTTPException(status_code=403, detail="Invalid lab session password.")
+
+        # Checkpoints/labs (and any target) closed to students can't be submitted to.
+        if not db_target.is_published:
+            raise HTTPException(status_code=403, detail="This session is not open yet.")
+
+        # Once the student has explicitly submitted this set it becomes read-only —
+        # reject further submissions so review can't move the completion timestamp.
+        submit_prog_res = await db.execute(
+            select(StudentHomeworkProgress).where(
+                and_(
+                    StudentHomeworkProgress.user_id == user_id,
+                    StudentHomeworkProgress.weekly_target_id == db_target.id,
+                )
+            )
+        )
+        submit_prog = submit_prog_res.scalar_one_or_none()
+        if submit_prog is not None and submit_prog.submitted_at is not None:
+            raise HTTPException(
+                status_code=403,
+                detail="You have already submitted this set. It is now in read-only review mode."
+            )
 
     # Security check: verify student has completed the corresponding Intermediate Exercise.
     # Labs have no misconception probes, so the quiz gate only applies to homework.
@@ -342,6 +364,7 @@ async def create_attempt(
         misconceptions=misconceptions,
         context=attempt_context,
         target_id=attempt.target_id,
+        pseudocode_explanation=attempt.pseudocode_explanation,
     )
     db.add(db_attempt)
 
@@ -398,8 +421,9 @@ async def create_attempt(
                     problems_stmt = select(Problem)
                     all_probs_res = await db.execute(problems_stmt)
                     all_probs = all_probs_res.scalars().all()
-                    matched_keys = [p.key for p in matched_problems_for_target(db_target, all_probs)]
-                    
+                    assigned = await resolve_assigned_problems_async(db, db_target, all_probs)
+                    matched_keys = [p.key for p in assigned]
+
                     solved_stmt = select(Attempt.task_ref).where(
                         and_(
                             Attempt.user_id == uuid.UUID(current_user["id"]),
@@ -410,10 +434,13 @@ async def create_attempt(
                     solved_res = await db.execute(solved_stmt)
                     solved_keys = {row[0] for row in solved_res.all()}
                     solved_keys.add(db_attempt.task_ref)
-                    
-                    if len(solved_keys) >= len(matched_keys):
+
+                    if matched_keys and len(solved_keys) >= len(matched_keys):
+                        # Idempotent completion: stamp ps_completed_at only on the first
+                        # transition, never overwrite it (fixes the review re-stamp bug).
+                        if progress.ps_completed_at is None:
+                            progress.ps_completed_at = func.now()
                         progress.ps_status = "completed"
-                        progress.ps_completed_at = func.now()
                         
             await db.flush()
             # Pre-aggregate summary report

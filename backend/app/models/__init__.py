@@ -1,6 +1,6 @@
 from app.models.base import Base
 from app.models.user import User
-from app.models.target import WeeklyTarget
+from app.models.target import WeeklyTarget, TargetProblem
 from app.models.attempt import Attempt
 from app.models.state import StudentModelState
 from app.models.episode import TutoringEpisode
@@ -39,6 +39,7 @@ __all__ = [
     "Base",
     "User",
     "WeeklyTarget",
+    "TargetProblem",
     "Attempt",
     "StudentModelState",
     "TutoringEpisode",
