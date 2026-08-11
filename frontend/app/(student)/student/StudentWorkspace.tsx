@@ -13,7 +13,7 @@ import DapCodeEditor from '@/components/DapCodeEditor';
 import MisconceptionRemediation from '@/components/MisconceptionRemediation';
 import ProblemMarkdown from '@/components/ProblemMarkdown';
 import { Skeleton } from '@/components/Skeleton';
-import { KcInfo, getKcDisplayName, DEFAULT_STARTER_CODE } from '@/lib/kc-utils';
+import { KcInfo, getKcDisplayName, DEFAULT_STARTER_CODE, getStarterCodeForProblem } from '@/lib/kc-utils';
 import MPQuizModal from '@/components/homework/MPQuizModal';
 import { HomeworkStatus } from '@/lib/homework-types';
 import { getHomeworkStatuses, submitHomeworkSet } from '@/lib/homework-api';
@@ -874,11 +874,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
     if (selectedTarget && problems.length > 0) {
       const assigned = getProblemsForTarget(selectedTarget);
       const activeProb = assigned[activeProblemIndex];
-      if (activeProb) {
-        setCode(activeProb.starter_code);
-      } else {
-        setCode(DEFAULT_STARTER_CODE);
-      }
+      setCode(getStarterCodeForProblem(activeProb));
       setEvalResult(null);
       setErrorMessage('');
       setShowHintPrompt(false);
@@ -917,7 +913,7 @@ export default function StudentWorkspace({ initialTargets, selectedTargetId, mod
 
   const resetTemplate = () => {
     if (currentProblem) {
-      setCode(currentProblem.starter_code);
+      setCode(getStarterCodeForProblem(currentProblem));
       setEvalResult(null);
       setErrorMessage('');
     }

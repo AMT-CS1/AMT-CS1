@@ -26,11 +26,46 @@ export function getKcDisplayName(kcIds: string, kcList: KcInfo[]): string {
 }
 
 /**
- * Default starter code template when no problem-specific starter_code is available.
+ * Sanitizes a title string into a valid DAP program identifier.
+ */
+export function sanitizeProgramName(name?: string): string {
+  if (!name) return 'HomeworkTask';
+  const cleaned = name.replace(/[^a-zA-Z0-9_]/g, '');
+  return cleaned || 'HomeworkTask';
+}
+
+/**
+ * Generates boilerplate DAP template code for a problem.
+ * Matches standard DAP structure:
+ * program [The name of the problem]
+ * dictionary
+ * 
+ * algorithm
+ * 
+ * endprogram
+ */
+export function getStarterCodeForProblem(problem?: { title?: string; name?: string; key?: string; starter_code?: string } | null): string {
+  const progName = sanitizeProgramName(problem?.title || problem?.name || problem?.key);
+
+  if (problem?.starter_code && problem.starter_code.trim()) {
+    const trimmed = problem.starter_code.trim();
+    if (trimmed.toLowerCase().startsWith('program')) {
+      return trimmed;
+    }
+    const indented = trimmed.split('\n').map(line => (line.trim() ? `    ${line}` : line)).join('\n');
+    return `program ${progName}\ndictionary\n\nalgorithm\n${indented}\nendprogram`;
+  }
+
+  return `program ${progName}\ndictionary\n\nalgorithm\n\nendprogram`;
+}
+
+/**
+ * Default starter code template when no problem-specific info is available.
  */
 export const DEFAULT_STARTER_CODE = `program HomeworkTask
 dictionary
-    // Define your variables here
+  {{ Write your variables here }}
 algorithm
-    // Write your logic here
+  {{ Write your algorithms here }}
 endprogram`;
+

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 
 from app.core.security import RoleChecker
@@ -321,7 +322,12 @@ async def get_or_create_mp_session(
             mp_started_at=func.now()
         )
         db.add(progress)
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            progress_res = await db.execute(progress_stmt)
+            progress = progress_res.scalar_one_or_none()
     elif progress.mp_status == "red":
         raise HTTPException(status_code=403, detail="This homework target is locked.")
     elif progress.mp_status == "completed":
@@ -414,8 +420,16 @@ async def get_or_create_mp_session(
         db.add(session)
         
         # Ensure progress status is in_progress
-        progress.mp_status = "in_progress"
-        await db.commit()
+        if progress:
+            progress.mp_status = "in_progress"
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            session_res = await db.execute(session_stmt)
+            session = session_res.scalar_one_or_none()
+            if not session:
+                raise
     else:
         # Load question if missing but session active
         if session.current_question_id is None and session.current_index < len(session.tag_queue):
