@@ -33,3 +33,6 @@ backend/dap
 backend/dap.exe
 .claude/
 ListKC.pdf
+
+# Moodle exports — may contain real student names/grades; keep them local
+misc/Moodle_Quiz_Report_*.xlsx
