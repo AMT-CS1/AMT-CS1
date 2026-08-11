@@ -10,6 +10,7 @@ from app.core.database import get_db
 from app.core.security import RoleChecker
 from app.core.storage import upload_bytes_to_minio
 from app.core.lms_import import parse_workbook, upsert_lms_data
+from app.core.roster_import import parse_roster_workbook, upsert_roster
 from app.core.lms_reports import (
     teacher_summary,
     student_report,
@@ -30,6 +31,7 @@ from app.schemas.lms_reports import (
     StepTimeline,
     QuestionSlotDetail,
 )
+from app.schemas.roster import RosterImportResult
 
 router = APIRouter(prefix="/lms", tags=["lms-reports"])
 
@@ -125,6 +127,79 @@ async def list_lms_imports(
     stmt = select(LmsImport).order_by(LmsImport.created_at.desc()).limit(50)
     result = await db.execute(stmt)
     return result.scalars().all()
+
+
+@router.post("/roster", response_model=RosterImportResult, status_code=201)
+async def create_roster_import(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(RoleChecker(["researcher"])),
+):
+    """Provision a class from a roster XLSX: create teacher + student accounts,
+    the course, and the teacher↔class↔student links in one idempotent pass (R4)."""
+    filename = file.filename or "roster.xlsx"
+    if not filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="Only .xlsx files are accepted")
+
+    body = await file.read()
+    if len(body) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File exceeds the 25 MB upload limit")
+    if not body:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    import_id = uuid.uuid4()
+    uploaded_by = uuid.UUID(str(current_user["id"]))
+
+    storage_ref = None
+    try:
+        storage_ref = await upload_bytes_to_minio(
+            f"roster_imports/{import_id}_{filename}", body, XLSX_CONTENT_TYPE
+        )
+    except Exception:
+        pass
+
+    def _fail(detail: str):
+        return LmsImport(
+            id=import_id, uploaded_by=uploaded_by, filename=filename,
+            storage_ref=storage_ref, status="failed", row_counts={"import_type": "roster"},
+        )
+
+    try:
+        parsed = parse_roster_workbook(io.BytesIO(body))
+    except ValueError as e:
+        db.add(_fail(str(e)))
+        await db.commit()
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        db.add(_fail("unreadable"))
+        await db.commit()
+        raise HTTPException(status_code=400, detail="File could not be read as an XLSX workbook")
+
+    result = await upsert_roster(db, parsed)  # commits the provisioning
+
+    # Provenance: reuse LmsImport, tagging the type so the imports list can label it.
+    db_import = LmsImport(
+        id=import_id,
+        uploaded_by=uploaded_by,
+        filename=filename,
+        storage_ref=storage_ref,
+        status="completed",
+        row_counts={"import_type": "roster", **result["counts"]},
+        unmatched_count=result["counts"].get("skipped", 0),
+    )
+    db.add(db_import)
+    await db.commit()
+    await db.refresh(db_import)
+
+    return RosterImportResult(
+        id=db_import.id,
+        filename=db_import.filename,
+        status=db_import.status,
+        counts=result["counts"],
+        generated_credentials=result["generated_credentials"],
+        skipped=result["skipped"],
+        created_at=db_import.created_at,
+    )
 
 
 TEACHER_ROLES = ["instructor", "researcher"]
