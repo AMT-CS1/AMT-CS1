@@ -3,14 +3,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.security import verify_password, create_access_token
+from app.core.security import verify_password, create_access_token, oauth2_scheme, blacklist_token
 from app.core.database import get_db
+from app.core.config import settings
+from app.core.rate_limiter import rate_limit
 from app.models.user import User
 from app.schemas.user import Token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-@router.post("/token", response_model=Token)
+@router.post(
+    "/token",
+    response_model=Token,
+    dependencies=[Depends(rate_limit("login", settings.RATE_LIMIT_LOGIN_PER_MIN, 60))]
+)
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db)
@@ -36,3 +42,9 @@ async def login_for_access_token(
         }
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+@router.post("/logout", status_code=200)
+async def logout(token: str = Depends(oauth2_scheme)):
+    """Blacklist active JWT token in Redis."""
+    await blacklist_token(token, expires_in_seconds=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+    return {"detail": "Successfully logged out"}

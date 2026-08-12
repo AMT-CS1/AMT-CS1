@@ -8,6 +8,7 @@ from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.redis import redis_client
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -64,6 +65,21 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     encoded_jwt = jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
 
+async def blacklist_token(token: str, expires_in_seconds: int = 3600):
+    """Blacklist a JWT token in Redis until it expires."""
+    try:
+        await redis_client.set(f"blacklist:{token}", "1", ex=expires_in_seconds)
+    except Exception as e:
+        pass
+
+async def is_token_blacklisted(token: str) -> bool:
+    """Check if token is blacklisted in Redis."""
+    try:
+        val = await redis_client.get(f"blacklist:{token}")
+        return val is not None
+    except Exception:
+        return False
+
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db)
@@ -73,6 +89,10 @@ async def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    # Check if token is blacklisted in Redis
+    if await is_token_blacklisted(token):
+        raise credentials_exception
+
     try:
         payload = jwt.decode(
             token,

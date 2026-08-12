@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
+    CACHE_TTL_PROBLEMS: int = 3600
+    CACHE_TTL_KCS: int = 86400
+    RATE_LIMIT_ATTEMPTS_PER_MIN: int = 10
+    RATE_LIMIT_TUTORING_PER_MIN: int = 5
+    RATE_LIMIT_LOGIN_PER_MIN: int = 10
     
     # JWT Secrets
     JWT_SECRET: str = "supersecretjwtkeyforamtcs1developmentonly"

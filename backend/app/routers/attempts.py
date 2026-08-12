@@ -10,6 +10,7 @@ from typing import List, Optional
 
 from app.core.security import RoleChecker
 from app.core.database import get_db
+from app.core.rate_limiter import rate_limit
 from app.core.storage import get_s3_client
 from app.core.config import settings
 from app.core.dap_runner import evaluate_student_attempt, generate_feedback
@@ -118,7 +119,12 @@ async def upload_text_to_minio(key: str, body: str, content_type: str = "text/pl
 async def upload_code_to_minio(code: str) -> str:
     return await upload_text_to_minio(f"attempts/{uuid.uuid4().hex}.dap", code)
 
-@router.post("", response_model=AttemptEvaluationResponse, status_code=201)
+@router.post(
+    "",
+    response_model=AttemptEvaluationResponse,
+    status_code=201,
+    dependencies=[Depends(rate_limit("attempts", settings.RATE_LIMIT_ATTEMPTS_PER_MIN, 60))]
+)
 async def create_attempt(
     attempt: AttemptCreate,
     db: AsyncSession = Depends(get_db),

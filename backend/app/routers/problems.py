@@ -6,6 +6,8 @@ import uuid
 
 from app.core.security import RoleChecker
 from app.core.database import get_db
+from app.core.config import settings
+from app.core.cache import get_cache, set_cache, delete_cache_pattern
 from app.core.misconception import generate_ast_json
 from app.core.references import (
     delete_reference_file,
@@ -75,10 +77,18 @@ async def list_problems(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(RoleChecker(["student", "instructor", "researcher", "rater"]))
 ):
+    role = current_user.get("role")
+    cache_key = f"problems:list:{role}"
+    cached = await get_cache(cache_key)
+    if cached is not None:
+        return [ProblemResponse(**p) for p in cached]
+
     stmt = select(Problem)
     result = await db.execute(stmt)
     problems = result.scalars().all()
-    return [serialize_problem(p, current_user.get("role")) for p in problems]
+    serialized = [serialize_problem(p, role) for p in problems]
+    await set_cache(cache_key, [p.model_dump() for p in serialized], ttl_seconds=settings.CACHE_TTL_PROBLEMS)
+    return serialized
 
 @router.get("/by-kc", response_model=List[ProblemResponse])
 async def list_problems_by_kc(
@@ -91,6 +101,12 @@ async def list_problems_by_kc(
     if not requested_kcs:
         return []
     
+    role = current_user.get("role")
+    cache_key = f"problems:by_kc:{','.join(sorted(requested_kcs))}:{role}"
+    cached = await get_cache(cache_key)
+    if cached is not None:
+        return [ProblemResponse(**p) for p in cached]
+
     stmt = select(Problem)
     result = await db.execute(stmt)
     all_problems = result.scalars().all()
@@ -102,7 +118,9 @@ async def list_problems_by_kc(
         if problem_kcs & requested_kcs:  # intersection
             matched.append(p)
 
-    return [serialize_problem(p, current_user.get("role")) for p in matched]
+    serialized = [serialize_problem(p, role) for p in matched]
+    await set_cache(cache_key, [p.model_dump() for p in serialized], ttl_seconds=settings.CACHE_TTL_PROBLEMS)
+    return serialized
 
 @router.get("/{key}", response_model=ProblemResponse)
 async def get_problem(
@@ -110,12 +128,20 @@ async def get_problem(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(RoleChecker(["student", "instructor", "researcher", "rater"]))
 ):
+    role = current_user.get("role")
+    cache_key = f"problem:{key}:{role}"
+    cached = await get_cache(cache_key)
+    if cached is not None:
+        return ProblemResponse(**cached)
+
     stmt = select(Problem).where(Problem.key == key)
     result = await db.execute(stmt)
     problem = result.scalar_one_or_none()
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
-    return serialize_problem(problem, current_user.get("role"))
+    serialized = serialize_problem(problem, role)
+    await set_cache(cache_key, serialized.model_dump(), ttl_seconds=settings.CACHE_TTL_PROBLEMS)
+    return serialized
 
 async def _get_problem_by_id(id: uuid.UUID, db: AsyncSession) -> Problem:
     res = await db.execute(select(Problem).where(Problem.id == id))
@@ -232,6 +258,7 @@ async def create_or_update_problem(
 
     await db.commit()
     await db.refresh(db_problem)
+    await delete_cache_pattern("problem*")
     return db_problem
 
 @router.put("/{id}", response_model=ProblemResponse)
@@ -267,6 +294,7 @@ async def update_problem(
 
     await db.commit()
     await db.refresh(db_problem)
+    await delete_cache_pattern("problem*")
     return db_problem
 
 @router.delete("/{id}", status_code=204)
@@ -283,4 +311,5 @@ async def delete_problem(
         
     await db.delete(db_problem)
     await db.commit()
+    await delete_cache_pattern("problem*")
     return {}
