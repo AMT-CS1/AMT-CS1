@@ -14,13 +14,17 @@ def rate_limit(prefix: str, limit: int, window_seconds: int = 60) -> Callable:
         @router.post("/attempts", dependencies=[Depends(rate_limit("attempts", 10, 60))])
     """
     async def dependency(request: Request):
-        # Extract user ID from state/auth if present, fallback to client IP
+        # Extract user ID from state/auth if present, check X-Forwarded-For, fallback to client IP
         identifier = "anonymous"
         user = getattr(request.state, "user", None)
         if isinstance(user, dict) and "id" in user:
             identifier = str(user["id"])
-        elif request.client and request.client.host:
-            identifier = request.client.host
+        else:
+            forwarded = request.headers.get("x-forwarded-for")
+            if forwarded:
+                identifier = forwarded.split(",")[0].strip()
+            elif request.client and request.client.host:
+                identifier = request.client.host
 
         key = f"rate_limit:{prefix}:{identifier}"
         now = time.time()
